@@ -32,12 +32,16 @@
     "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"],
-      "bun:bundle": ["./shims/bun-bundle.d.ts"]
+      "bun:bundle": ["./shims/bun-bundle.d.ts"],
+      "audio-capture-napi": ["./stubs/audio-capture-napi/index.ts"],
+      "image-processor-napi": ["./stubs/image-processor-napi/index.ts"],
+      "modifiers-napi": ["./stubs/modifiers-napi/index.ts"],
+      "url-handler-napi": ["./stubs/url-handler-napi/index.ts"]
     },
 
     /* Output */
     "noEmit": true,
     "declaration": false
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "shims/**/*.ts", "shims/**/*.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "shims/**/*.ts", "shims/**/*.d.ts", "stubs/**/*.ts"]
 }

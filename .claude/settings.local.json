@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run:*)",
+      "Bash(sed \"s|\\\\\\([^:]*\\\\\\)\\([0-9]*,[0-9]*\\): error TS2614: Module ''''\\\\\\([^'''']*\\\\\\)'''' has no exported member ''''\\\\\\([^'''']*\\\\\\)''''.*|\\\\1 \\\\2 \\\\3|\")",
+      "Read(//tmp/**)",
+      "Bash(python3:*)",
+      "Bash(sort -t' ' -k2,3)",
+      "Bash(grep -rn isReplBridgeActive /Users/jianghua/work/opened-claude-code/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -l \"BetaJSONOutputFormat\\\\|BetaOutputConfig\\\\|BetaRequestDocumentBlock\" /Users/jianghua/work/opened-claude-code/node_modules/@anthropic-ai/sdk/resources/beta/messages/*.d.ts)",
+      "Bash(head -5 grep \"BetaJSONOutputFormat\\\\|BetaOutputConfig\\\\|BetaRequestDocumentBlock\" /Users/jianghua/work/opened-claude-code/node_modules/@anthropic-ai/sdk/resources/beta/messages/messages.d.mts)",
+      "Bash(npx tsc:*)",
+      "Bash(npm show:*)",
+      "Bash(for pkg:*)",
+      "Bash(do)",
+      "Bash(echo \"=== @anthropic-ai/$pkg stub ===\")",
+      "Read(//Users/jianghua/work/opened-claude-code/stubs/@anthropic-ai/$pkg/**)",
+      "Read(//Users/jianghua/work/opened-claude-code/stubs/@anthropic-ai/**)",
+      "Bash(echo \"=== @anthropic-ai/$pkg ===\")",
+      "Bash(done)",
+      "Bash(bun install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git stash:*)",
+      "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/utils/modifiers.ts)",
+      "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/services/voice.ts)",
+      "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/tools/FileReadTool/imageProcessor.ts)",
+      "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/utils/deepLink/protocolHandler.ts)",
+      "Bash(npm pack:*)",
+      "Bash(npm i:*)"
+    ]
+  }
+}

@@ -72,27 +72,7 @@ declare module 'color-diff-napi' {
   export type ColorDiffResult = any;
 }
 
-declare module 'modifiers-napi' {
-  export function prewarm(): void;
-  export function isModifierPressed(m: string): boolean;
-}
-
 declare module 'audio-capture.node' {
-  const mod: any;
-  export default mod;
-}
-
-declare module 'audio-capture-napi' {
-  const mod: any;
-  export default mod;
-}
-
-declare module 'image-processor-napi' {
-  const mod: any;
-  export default mod;
-}
-
-declare module 'url-handler-napi' {
   const mod: any;
   export default mod;
 }
