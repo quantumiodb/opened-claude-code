@@ -17,6 +17,12 @@ bun run build
 bun dist/cli.js --help
 ```
 
+or just run
+
+```bash
+bun run dev
+```
+
 **Requirements:** [Bun](https://bun.sh) v1.1+
 
 ## What Was Done
@@ -52,7 +58,66 @@ FEATURES=BRIDGE_MODE,VOICE_MODE bun dist/cli.js
 bun run typecheck
 ```
 
+## Documentation
+
+Comprehensive reverse engineering documentation is available in [`docs/reverse-engineering/20260331/`](docs/reverse-engineering/20260331/README.md) — 10,000+ lines covering architecture, data flows, state machines, and key algorithms with code snippets and source references. Enough detail to reconstruct the system.
+
 ## Architecture
+
+```mermaid
+graph TB
+    subgraph "User Interfaces"
+        Terminal["Terminal (CLI)"]
+        IDE["IDE Extensions<br/>(VS Code / JetBrains)"]
+        Web["claude.ai"]
+        SDK["SDK (Programmatic)"]
+    end
+
+    subgraph "Entry & Bootstrap"
+        CLI["cli.tsx<br/>Fast-path routing"]
+        Main["main.tsx<br/>Full CLI setup"]
+        State["bootstrap/state.ts<br/>Session state"]
+    end
+
+    subgraph "Core Engine"
+        QE["QueryEngine.ts<br/>Conversation orchestrator"]
+        Query["query.ts<br/>Agentic loop"]
+        ToolOrch["toolOrchestration.ts<br/>Concurrent/serial execution"]
+    end
+
+    subgraph "Tool System"
+        ToolReg["tools.ts — 55+ tools"]
+        Perms["Permission System<br/>7 layers, 6 modes"]
+    end
+
+    subgraph "Services"
+        API["Claude API<br/>5 providers"]
+        MCP["MCP Servers<br/>6 transport types"]
+        LSP_["LSP Servers"]
+        Compact["Context Compaction"]
+    end
+
+    subgraph "UI Layer"
+        Ink["React 19 + Ink<br/>140+ components"]
+        Store["Zustand Store"]
+    end
+
+    Terminal --> CLI --> Main --> QE
+    IDE --> Main
+    Web --> Main
+    SDK --> QE
+
+    Main --> State
+    QE --> Query --> API
+    Query --> ToolOrch --> ToolReg
+    ToolOrch --> Perms
+    ToolReg --> MCP
+    ToolReg --> LSP_
+
+    QE --> Compact
+    QE --> Ink --> Terminal
+    Ink --> Store
+```
 
 | | |
 |---|---|
