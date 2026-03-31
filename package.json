@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "bun run tsc --noEmit",
-    "build": "bun build src/entrypoints/cli.tsx --outdir=dist --target=bun --sourcemap=external --define 'MACRO.VERSION=\"2.1.88\"' --define 'MACRO.BUILD_TIME=\"2026-03-31\"' --define 'MACRO.PACKAGE_URL=\"@anthropic-ai/claude-code\"' --define 'MACRO.NATIVE_PACKAGE_URL=\"\"' --define 'MACRO.FEEDBACK_CHANNEL=\"\"' --define 'MACRO.ISSUES_EXPLAINER=\"\"' --define 'MACRO.VERSION_CHANGELOG=\"\"'",
+    "build": "bun build src/entrypoints/cli.tsx --outdir=dist --target=bun --sourcemap=external --define 'MACRO.VERSION=\"2.1.87\"' --define 'MACRO.BUILD_TIME=\"2026-03-10\"' --define 'MACRO.PACKAGE_URL=\"@anthropic-ai/claude-code\"' --define 'MACRO.NATIVE_PACKAGE_URL=\"\"' --define 'MACRO.FEEDBACK_CHANNEL=\"\"' --define 'MACRO.ISSUES_EXPLAINER=\"\"' --define 'MACRO.VERSION_CHANGELOG=\"\"'",
     "start": "bun dist/cli.js",
     "dev": "bun run build && bun dist/cli.js"
   },
