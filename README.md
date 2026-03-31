@@ -1,10 +1,36 @@
 # Opened Claude Code
 
+[中文版](README_CN.md)
+
 A buildable reconstruction of Anthropic's **Claude Code** CLI, based on the TypeScript source snapshot that was [publicly exposed](https://x.com/Fried_rice/status/2038894956459290963) on March 31, 2026 via a source map in the npm package.
 
 The original snapshot contained only `src/` — no `package.json`, no build config, no dependencies. This repository reconstructs the full development environment so the code can be built, run, and studied.
 
-## ScreenShots
+## Hidden Easter Egg: Virtual Pet System ("Buddy")
+
+A fully-featured virtual pet system is buried in the source code under `src/buddy/`, gated behind `feature('BUDDY')`. It was planned as an **April Fools' 2026 launch** (teaser window: April 1–7).
+
+```
+   \^^^/            ♥    ♥
+   /\_/\           ♥  ♥   ♥
+  ( ✦   ✦)       ♥   ♥  ♥
+  (  ω  )
+  (")_(")~
+   Pixel ★★★★
+```
+
+- **18 species** — duck, cat, dragon, axolotl, capybara, ghost, mushroom, chonk, and more
+- **Gacha rarity** — Common (60%) → Legendary (1%), plus 1% shiny chance
+- **Deterministic roll** — appearance derived from `hash(userId)`, can't be faked
+- **LLM-generated soul** — name and personality written by Claude on first hatch
+- **ASCII sprite animation** — 3-frame idle cycles, blink, fidget, and heart burst on `/buddy pet`
+- **Speech bubbles** — the pet comments on your conversation after each turn
+- **RPG stats** — DEBUGGING, PATIENCE, CHAOS, WISDOM, SNARK
+- **Hat system** — crown, wizard hat, propeller cap, halo... and a tiny duck on its head
+
+Full write-up: [`docs/deep-dive-buddy-companion-system.md`](docs/deep-dive-buddy-companion-system.md) | [中文版](docs/deep-dive-buddy-companion-system_cn.md)
+
+## Screenshots
 
 ![Main CLI UI](./images/screen-sort-001.png)
 ![CLI Help](./images/ScreenShot_2026-03-31_141415_572.png)
