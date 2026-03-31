@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    /* Language & Runtime */
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun-types"],
+
+    /* JSX for React + Ink */
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+
+    /* Strict checks — relaxed for partial source snapshot */
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Module interop */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    /* Path resolution: the codebase uses both './foo.js' and 'src/foo.js' imports */
+    "baseUrl": ".",
+    "paths": {
+      "src/*": ["./src/*"],
+      "bun:bundle": ["./shims/bun-bundle.d.ts"]
+    },
+
+    /* Output */
+    "noEmit": true,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "shims/**/*.ts", "shims/**/*.d.ts"]
+}
