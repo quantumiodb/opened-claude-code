@@ -1,5 +1,6 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -55,11 +56,25 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')
-  const command =
+  const platformDir =
     process.platform === 'win32'
-      ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
-      : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+      ? `${process.arch}-win32`
+      : `${process.arch}-${process.platform}`
+  const executable = process.platform === 'win32' ? 'rg.exe' : 'rg'
+
+  // Build output can place cli.js in `dist/` while vendor assets remain at
+  // repo root (`vendor/`). Try several roots so development builds don't fail
+  // with ENOENT when `dist/vendor` is missing.
+  const candidateRoots = [
+    path.resolve(__dirname, 'vendor', 'ripgrep'),
+    path.resolve(__dirname, '..', 'vendor', 'ripgrep'),
+    path.resolve(__dirname, '..', '..', 'vendor', 'ripgrep'),
+  ]
+  const rgRoot =
+    candidateRoots.find(root =>
+      existsSync(path.resolve(root, platformDir, executable)),
+    ) ?? candidateRoots[0]
+  const command = path.resolve(rgRoot, platformDir, executable)
 
   return { mode: 'builtin', command, args: [] }
 })
