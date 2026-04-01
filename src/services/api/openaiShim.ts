@@ -255,8 +255,10 @@ async function* openaiStreamToAnthropic(
     for (const choice of chunk.choices ?? []) {
       const delta = choice.delta
 
-      // Text content
-      if (delta.content) {
+      // Text content — also handle reasoning_content (GLM-4 / DeepSeek-R1 style)
+      const textContent =
+        delta.content || (delta as unknown as Record<string, string>).reasoning_content || null
+      if (textContent) {
         if (!hasEmittedContentStart) {
           yield {
             type: 'content_block_start',
@@ -268,7 +270,7 @@ async function* openaiStreamToAnthropic(
         yield {
           type: 'content_block_delta',
           index: contentBlockIndex,
-          delta: { type: 'text_delta', text: delta.content },
+          delta: { type: 'text_delta', text: textContent },
         }
       }
 
