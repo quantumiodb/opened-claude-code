@@ -5,6 +5,7 @@ import { checkAndRefreshOAuthTokenIfNeeded } from '../../utils/auth.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
 import { getAuthHeaders, getUserAgent } from '../../utils/http.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import { normalizeMessagesForAPI } from '../../utils/messages.js'
 import {
   extractAgentIdsFromMessages,
@@ -31,6 +32,11 @@ export async function submitTranscriptShare(
   trigger: TranscriptShareTrigger,
   appearanceId: string,
 ): Promise<TranscriptShareResult> {
+  // Transcript sharing is only supported for the Anthropic provider
+  if (getAPIProvider() !== 'firstParty') {
+    return { success: false }
+  }
+
   try {
     logForDebugging('Collecting transcript for sharing', { level: 'info' })
 
