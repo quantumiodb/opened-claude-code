@@ -6,8 +6,6 @@
  */
 
 import OpenAI from 'openai'
-import { appendFileSync, mkdirSync } from 'fs'
-import { join, resolve } from 'path'
 
 interface AnthropicUsage {
   input_tokens: number
@@ -69,48 +67,8 @@ function makeMessageId(): string {
   return `msg_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
 }
 
-function isDebugEnabled(): boolean {
-  return (
-    process.env.CLAUDE_OPENAI_TOOL_DEBUG === '1' ||
-    process.env.OPENAI_SHIM_DEBUG === '1'
-  )
-}
-
 function shouldIncludeReasoningContent(): boolean {
   return process.env.OPENAI_SHIM_INCLUDE_REASONING === '1'
-}
-
-let debugLogFilePath: string | null = null
-
-function getDebugLogFilePath(): string {
-  if (debugLogFilePath) return debugLogFilePath
-
-  const baseDir = resolve(process.env.OPENAI_SHIM_DEBUG_DIR ?? process.cwd())
-  mkdirSync(baseDir, { recursive: true })
-
-  const ts = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `openai-shim-debug-${ts}-${process.pid}.log`
-  debugLogFilePath = join(baseDir, fileName)
-  return debugLogFilePath
-}
-
-function appendDebugLogLine(line: string): void {
-  try {
-    appendFileSync(getDebugLogFilePath(), `${line}\n`, 'utf8')
-  } catch {
-    // Never let debug logging break request flow.
-  }
-}
-
-function debugLog(event: string, payload: Record<string, unknown>): void {
-  if (!isDebugEnabled()) return
-  const safe = JSON.stringify(payload, (_k, v) =>
-    typeof v === 'string' && v.length > 400 ? `${v.slice(0, 400)}...` : v,
-  )
-  const line = `[openai-shim-debug] ${new Date().toISOString()} ${event} ${safe}`
-  // eslint-disable-next-line no-console
-  console.error(line)
-  appendDebugLogLine(line)
 }
 
 function convertSystemPrompt(system: unknown): string {
@@ -502,6 +460,10 @@ async function* openaiStreamToAnthropic(
   let nextContentBlockIndex = 0
   let hasOpenTextBlock = false
   let sawFinishReason = false
+  // Once any tool_call delta arrives we stop emitting text so that models
+  // that stream the tool invocation as plain text before the structured
+  // tool_calls (e.g. GLM-4.7) don't pollute the UI with raw parameter text.
+  let textSuppressed = false
 
   const toolStates = new Map<number, StreamToolState>()
 
@@ -585,18 +547,15 @@ async function* openaiStreamToAnthropic(
         contentChunk ||
         (shouldIncludeReasoningContent() ? reasoningChunk : '')
 
-      if (
-        !contentChunk &&
-        reasoningChunk &&
-        !shouldIncludeReasoningContent() &&
-        isDebugEnabled()
-      ) {
-        debugLog('reasoning_content_dropped', {
-          preview: reasoningChunk.slice(0, 240),
-        })
+      // Suppress text once tool calls have started to avoid models that echo
+      // the tool invocation as plain text before streaming structured tool_calls.
+      if (delta.tool_calls && delta.tool_calls.length > 0 && !textSuppressed) {
+        textSuppressed = true
+        // Close any open text block before starting the tool block.
+        yield* closeTextBlockIfOpen()
       }
 
-      if (textChunk) {
+      if (textChunk && !textSuppressed) {
         if (!hasOpenTextBlock) {
           yield {
             type: 'content_block_start',
@@ -622,13 +581,6 @@ async function* openaiStreamToAnthropic(
               ? (tc.function as { name?: string; arguments?: string })
               : null
 
-          debugLog('tool_delta_raw', {
-            toolIndex,
-            id: tc.id ?? null,
-            nameChunk: functionPayload?.name ?? null,
-            argsChunk: functionPayload?.arguments ?? null,
-          })
-
           if (tc.id) state.id = tc.id
 
           if (typeof functionPayload?.name === 'string') {
@@ -649,15 +601,6 @@ async function* openaiStreamToAnthropic(
             state.argsBuffer = ''
           }
 
-          debugLog('tool_state', {
-            toolIndex,
-            id: state.id,
-            name: state.name,
-            nameLocked: state.nameLocked,
-            started: state.started,
-            blockIndex: state.blockIndex,
-            argsBufferedLength: state.argsBuffer.length,
-          })
         }
       }
 
@@ -695,12 +638,6 @@ async function* openaiStreamToAnthropic(
           choice.finish_reason,
           hasAnyToolCall,
         )
-
-        debugLog('finish_reason', {
-          providerFinishReason: choice.finish_reason,
-          mappedStopReason: stopReason,
-          hasAnyToolCall,
-        })
 
         yield {
           type: 'message_delta',

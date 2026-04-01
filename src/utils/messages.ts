@@ -15,6 +15,7 @@ import type {
 import { randomUUID, type UUID } from 'crypto'
 import isObject from 'lodash-es/isObject.js'
 import last from 'lodash-es/last.js'
+
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -2659,6 +2660,9 @@ export function normalizeContentFromAPI(
   return contentBlocks.map(contentBlock => {
     switch (contentBlock.type) {
       case 'tool_use': {
+        const { sanitizedName, spill } = sanitizeToolUseNameForStream(
+          contentBlock.name,
+        )
         if (
           typeof contentBlock.input !== 'string' &&
           !isObject(contentBlock.input)
@@ -2674,7 +2678,10 @@ export function normalizeContentFromAPI(
         // TODO: This needs patching as recursive fields can still be stringified
         let normalizedInput: unknown
         if (typeof contentBlock.input === 'string') {
-          const parsed = safeParseJSON(contentBlock.input)
+          const inputWithSpill = spill
+            ? `${spill}${contentBlock.input}`
+            : contentBlock.input
+          const parsed = safeParseJSON(inputWithSpill)
           if (parsed === null && contentBlock.input.length > 0) {
             // TET/FC-v3 diagnostic: the streamed tool input JSON failed to
             // parse. We fall back to {} which means downstream validation
@@ -2686,19 +2693,22 @@ export function normalizeContentFromAPI(
             })
             if (process.env.USER_TYPE === 'ant') {
               logForDebugging(
-                `tool input JSON parse fail: ${contentBlock.input.slice(0, 200)}`,
+                `tool input JSON parse fail: ${inputWithSpill.slice(0, 200)}`,
                 { level: 'warn' },
               )
             }
           }
-          normalizedInput = parsed ?? {}
+          normalizedInput =
+            parsed ??
+            tryRecoverLooseToolInput(inputWithSpill, sanitizedName) ??
+            {}
         } else {
           normalizedInput = contentBlock.input
         }
 
         // Then apply tool-specific corrections
         if (typeof normalizedInput === 'object' && normalizedInput !== null) {
-          const tool = findToolByName(tools, contentBlock.name)
+          const tool = findToolByName(tools, sanitizedName)
           if (tool) {
             try {
               normalizedInput = normalizeToolInput(
@@ -2715,6 +2725,7 @@ export function normalizeContentFromAPI(
 
         return {
           ...contentBlock,
+          name: sanitizedName,
           input: normalizedInput,
         }
       }
@@ -2747,6 +2758,100 @@ export function normalizeContentFromAPI(
       default:
         return contentBlock
     }
+  })
+}
+
+function tryRecoverLooseToolInput(
+  rawInput: string,
+  toolName: string,
+): Record<string, unknown> | null {
+  let s = rawInput.trim()
+  if (s.length === 0) return {}
+
+  const lowerToolName = toolName.toLowerCase()
+  if (s.toLowerCase().startsWith(lowerToolName)) {
+    s = s.slice(toolName.length).trimStart()
+  }
+
+  // Common malformed pattern from some OpenAI-compatible providers:
+  // "file_path/abs/path/to/file.ts" (missing JSON and delimiter).
+  const keyPathMatch = s.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*(\/.+)$/s)
+  if (keyPathMatch) {
+    const recovered = { [keyPathMatch[1]]: keyPathMatch[2].trim() }
+    debugToolInputRecovery(toolName, rawInput, 'key_path_slash', recovered)
+    return recovered
+  }
+
+  // Also support "key:value" and "key=value" single-arg payloads.
+  const keyValueMatch = s.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*[:=]\s*(.+)$/s)
+  if (keyValueMatch) {
+    const [, key, rawValue] = keyValueMatch
+    const recovered = { [key]: parseLooseScalar(rawValue.trim()) }
+    debugToolInputRecovery(toolName, rawInput, 'key_value', recovered)
+    return recovered
+  }
+
+  // Grep sometimes arrives as concatenated fields without delimiters, e.g.:
+  // "output_modefiles_with_matchespatternanthropic.*api|api.*anthropic"
+  if (toolName === 'Grep') {
+    const grepConcatMatch = s.match(
+      /^output_mode(content|files_with_matches|count)pattern(.+)$/s,
+    )
+    if (grepConcatMatch) {
+      const recovered = {
+        output_mode: grepConcatMatch[1],
+        pattern: grepConcatMatch[2].trim(),
+      }
+      debugToolInputRecovery(toolName, rawInput, 'grep_concat', recovered)
+      return recovered
+    }
+  }
+
+  // Read(path) often degrades to just an absolute path string.
+  if (toolName === FILE_READ_TOOL_NAME && s.startsWith('/')) {
+    const recovered = { file_path: s }
+    debugToolInputRecovery(toolName, rawInput, 'read_path_only', recovered)
+    return recovered
+  }
+
+  return null
+}
+
+function parseLooseScalar(raw: string): unknown {
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  if (raw === 'null') return null
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw)
+  const quoted = raw.match(/^"(.*)"$/s)
+  if (quoted) return quoted[1]
+  return raw
+}
+
+function debugToolInputRecovery(
+  toolName: string,
+  rawInput: string,
+  strategy:
+    | 'key_path_slash'
+    | 'key_value'
+    | 'read_path_only'
+    | 'grep_concat',
+  recovered: Record<string, unknown>,
+): void {
+  if (
+    process.env.CLAUDE_OPENAI_TOOL_DEBUG !== '1' &&
+    process.env.OPENAI_SHIM_DEBUG !== '1'
+  ) {
+    return
+  }
+  logForDebugging(
+    `[tool-input-recovery] tool=${toolName} strategy=${strategy} raw=${rawInput.slice(0, 300)} recovered=${jsonStringify(recovered).slice(0, 300)}`,
+    { level: 'warn' },
+  )
+  writeOpenAIToolDebug('tool_input_recovery', {
+    toolName,
+    strategy,
+    rawInputPreview: rawInput.slice(0, 500),
+    recovered,
   })
 }
 
@@ -2924,6 +3029,57 @@ export type StreamingThinking = {
   streamingEndedAt?: number
 }
 
+const TOOL_NAME_SANITIZE_CANDIDATES = Array.from(
+  new Set([
+    AGENT_TOOL_NAME,
+    ASK_USER_QUESTION_TOOL_NAME,
+    SEND_MESSAGE_TOOL_NAME,
+    TASK_CREATE_TOOL_NAME,
+    TASK_OUTPUT_TOOL_NAME,
+    TASK_UPDATE_TOOL_NAME,
+    FILE_READ_TOOL_NAME,
+    FILE_READ_TOOL_NAME,
+    GLOB_TOOL_NAME,
+    GREP_TOOL_NAME,
+    BashTool.name,
+    FileEditTool.name,
+    FileWriteTool.name,
+    ExitPlanModeV2Tool.name,
+    'Read',
+    'Write',
+    'Edit',
+    'Bash',
+    'Grep',
+    'Glob',
+    'LS',
+    'WebSearch',
+    'WebFetch',
+    'TaskGet',
+    'TaskList',
+    'TodoWrite',
+  ]),
+).sort((a, b) => b.length - a.length)
+
+function sanitizeToolUseNameForStream(rawName: string): {
+  sanitizedName: string
+  spill: string
+} {
+  if (!rawName) return { sanitizedName: rawName, spill: '' }
+  const lowerRaw = rawName.toLowerCase()
+  for (const candidate of TOOL_NAME_SANITIZE_CANDIDATES) {
+    const lowerCandidate = candidate.toLowerCase()
+    if (!lowerRaw.startsWith(lowerCandidate)) continue
+    if (rawName.length <= candidate.length) {
+      return { sanitizedName: candidate, spill: '' }
+    }
+    return {
+      sanitizedName: candidate,
+      spill: rawName.slice(candidate.length),
+    }
+  }
+  return { sanitizedName: rawName, spill: '' }
+}
+
 /**
  * Handles messages from a stream, updating response length for deltas and appending completed messages
  */
@@ -3019,13 +3175,23 @@ export function handleMessageFromStream(
         case 'tool_use': {
           onSetStreamMode('tool-input')
           const contentBlock = message.event.content_block
+          const { sanitizedName, spill } = sanitizeToolUseNameForStream(
+            contentBlock.name,
+          )
+          const normalizedContentBlock =
+            sanitizedName === contentBlock.name
+              ? contentBlock
+              : {
+                  ...contentBlock,
+                  name: sanitizedName,
+                }
           const index = message.event.index
           onStreamingToolUses(_ => [
             ..._,
             {
               index,
-              contentBlock,
-              unparsedToolInput: '',
+              contentBlock: normalizedContentBlock,
+              unparsedToolInput: spill,
             },
           ])
           return
@@ -3062,11 +3228,12 @@ export function handleMessageFromStream(
             if (!element) {
               return _
             }
+            const nextUnparsed = element.unparsedToolInput + delta
             return [
               ..._.filter(_ => _ !== element),
               {
                 ...element,
-                unparsedToolInput: element.unparsedToolInput + delta,
+                unparsedToolInput: nextUnparsed,
               },
             ]
           })
