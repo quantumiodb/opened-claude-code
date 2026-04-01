@@ -72,6 +72,12 @@ export async function assertMinVersion(): Promise<void> {
     return
   }
 
+  // Skip version enforcement for OpenAI-compatible provider — the min-version
+  // check talks to Anthropic's GrowthBook endpoint which is irrelevant here.
+  if (process.env.CLAUDE_CODE_USE_OPENAI) {
+    return
+  }
+
   try {
     const versionConfig = await getDynamicConfig_BLOCKS_ON_INIT<{
       minVersion: string
