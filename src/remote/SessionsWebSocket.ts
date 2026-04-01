@@ -10,6 +10,7 @@ import type {
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { logError } from '../utils/log.js'
+import { getAPIProvider } from '../utils/model/providers.js'
 import { getWebSocketTLSOptions } from '../utils/mtls.js'
 import { getWebSocketProxyAgent, getWebSocketProxyUrl } from '../utils/proxy.js'
 import { jsonParse, jsonStringify } from '../utils/slowOperations.js'
@@ -98,6 +99,13 @@ export class SessionsWebSocket {
    * Connect to the sessions WebSocket endpoint
    */
   async connect(): Promise<void> {
+    if (getAPIProvider() !== 'firstParty') {
+      logForDebugging(
+        '[SessionsWebSocket] Connection skipped: only supported for Anthropic provider',
+      )
+      return
+    }
+
     if (this.state === 'connecting') {
       logForDebugging('[SessionsWebSocket] Already connecting')
       return
