@@ -2,6 +2,7 @@ import { c as _c } from "react/compiler-runtime";
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
+import { isEnvTruthy } from './envUtils.js';
 import { Spinner } from '../components/Spinner.js';
 import { getOauthConfig } from '../constants/oauth.js';
 import { useTimeout } from '../hooks/useTimeout.js';
@@ -15,6 +16,11 @@ export interface PreflightCheckResult {
   sslHint?: string;
 }
 async function checkEndpoints(): Promise<PreflightCheckResult> {
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) {
+    return {
+      success: true
+    };
+  }
   try {
     const oauthConfig = getOauthConfig();
     const tokenUrl = new URL(oauthConfig.TOKEN_URL);
