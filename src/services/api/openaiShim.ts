@@ -333,8 +333,11 @@ async function* openaiStreamToAnthropic(
           yield { type: 'content_block_stop', index: tc.index }
         }
 
+        // Some models (e.g. GLM-4) send finish_reason:"stop" even when tool
+        // calls are present. Check activeToolCalls as a fallback so Claude
+        // Code's tool execution loop fires correctly.
         const stopReason =
-          choice.finish_reason === 'tool_calls'
+          choice.finish_reason === 'tool_calls' || activeToolCalls.size > 0
             ? 'tool_use'
             : choice.finish_reason === 'length'
               ? 'max_tokens'
@@ -348,6 +351,25 @@ async function* openaiStreamToAnthropic(
           },
         }
       }
+    }
+  }
+
+  // Cleanup: if the stream ended without a finish_reason (aborted/malformed),
+  // close any open blocks so the consumer isn't left in a broken state.
+  if (!hasProcessedFinishReason) {
+    if (hasEmittedContentStart) {
+      yield { type: 'content_block_stop', index: contentBlockIndex }
+    }
+    for (const [, tc] of activeToolCalls) {
+      yield { type: 'content_block_stop', index: tc.index }
+    }
+    yield {
+      type: 'message_delta',
+      delta: {
+        stop_reason: activeToolCalls.size > 0 ? 'tool_use' : 'end_turn',
+        stop_sequence: null,
+      },
+      usage: { output_tokens: 0 },
     }
   }
 
