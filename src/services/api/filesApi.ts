@@ -16,6 +16,7 @@ import { getCwd } from '../../utils/cwd.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import { sleep } from '../../utils/sleep.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -133,6 +134,9 @@ export async function downloadFile(
   fileId: string,
   config: FilesApiConfig,
 ): Promise<Buffer> {
+  if (getAPIProvider() !== 'firstParty') {
+    throw new Error('Files API is only supported for Anthropic provider')
+  }
   const baseUrl = config.baseUrl || getDefaultApiBaseUrl()
   const url = `${baseUrl}/v1/files/${fileId}/content`
 
@@ -381,6 +385,13 @@ export async function uploadFile(
   config: FilesApiConfig,
   opts?: { signal?: AbortSignal },
 ): Promise<UploadResult> {
+  if (getAPIProvider() !== 'firstParty') {
+    return {
+      path: relativePath,
+      error: 'Files API is only supported for Anthropic provider',
+      success: false,
+    }
+  }
   const baseUrl = config.baseUrl || getDefaultApiBaseUrl()
   const url = `${baseUrl}/v1/files`
 
@@ -618,6 +629,9 @@ export async function listFilesCreatedAfter(
   afterCreatedAt: string,
   config: FilesApiConfig,
 ): Promise<FileMetadata[]> {
+  if (getAPIProvider() !== 'firstParty') {
+    return []
+  }
   const baseUrl = config.baseUrl || getDefaultApiBaseUrl()
   const headers = {
     Authorization: `Bearer ${config.oauthToken}`,
