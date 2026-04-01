@@ -1310,13 +1310,20 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
  */
 export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
-const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = 'disabled'
+function getAutoModeEnabledDefault(): AutoModeEnabledState {
+  try {
+    const { getAPIProvider } = require('../model/providers.js') as typeof import('../model/providers.js')
+    return getAPIProvider() === 'openai' ? 'enabled' : 'disabled'
+  } catch {
+    return 'disabled'
+  }
+}
 
 function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
   if (value === 'enabled' || value === 'disabled' || value === 'opt-in') {
     return value
   }
-  return AUTO_MODE_ENABLED_DEFAULT
+  return getAutoModeEnabledDefault()
 }
 
 /**
