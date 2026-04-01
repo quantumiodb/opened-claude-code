@@ -8,6 +8,7 @@ import { queryHaiku } from '../../services/api/claude.js'
 import { AbortError } from '../../utils/errors.js'
 import { getWebFetchUserAgent } from '../../utils/http.js'
 import { logError } from '../../utils/log.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import {
   isBinaryContentType,
   persistBinaryContent,
@@ -382,9 +383,14 @@ export async function getURLMarkdownContent(
 
     // Check if the user has opted to skip the blocklist check
     // This is for enterprise customers with restrictive security policies
-    // that prevent outbound connections to claude.ai
+    // that prevent outbound connections to claude.ai.
+    // We also skip this check for non-Anthropic providers (OpenAI, Bedrock, etc)
+    // to protect user privacy and allow use in restricted network environments.
     const settings = getSettings_DEPRECATED()
-    if (!settings.skipWebFetchPreflight) {
+    const shouldSkipCheck =
+      settings.skipWebFetchPreflight || getAPIProvider() !== 'firstParty'
+
+    if (!shouldSkipCheck) {
       const checkResult = await checkDomainBlocklist(hostname)
       switch (checkResult.status) {
         case 'allowed':
