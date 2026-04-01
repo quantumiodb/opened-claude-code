@@ -120,20 +120,24 @@ export async function getAnthropicClient({
     `[API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: ${!!process.env.ANTHROPIC_CUSTOM_HEADERS}, has Authorization header: ${!!customHeaders['Authorization']}`,
   )
 
-  // Add additional protection header if enabled via env var
-  const additionalProtectionEnabled = isEnvTruthy(
-    process.env.CLAUDE_CODE_ADDITIONAL_PROTECTION,
-  )
+  const provider = getAPIProvider()
+  const is3P = provider !== 'firstParty'
+
+  // Add additional protection header if enabled via env var (only for 1P)
+  const additionalProtectionEnabled =
+    !is3P && isEnvTruthy(process.env.CLAUDE_CODE_ADDITIONAL_PROTECTION)
   if (additionalProtectionEnabled) {
     defaultHeaders['x-anthropic-additional-protection'] = 'true'
   }
 
-  logForDebugging('[API:auth] OAuth token check starting')
-  await checkAndRefreshOAuthTokenIfNeeded()
-  logForDebugging('[API:auth] OAuth token check complete')
+  if (!is3P) {
+    logForDebugging('[API:auth] OAuth token check starting')
+    await checkAndRefreshOAuthTokenIfNeeded()
+    logForDebugging('[API:auth] OAuth token check complete')
 
-  if (!isClaudeAISubscriber()) {
-    await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
+    if (!isClaudeAISubscriber()) {
+      await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
+    }
   }
 
   const resolvedFetch = buildFetch(fetchOverride, source)
@@ -144,16 +148,16 @@ export async function getAnthropicClient({
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
     fetchOptions: getProxyFetchOptions({
-      forAnthropicAPI: true,
+      forAnthropicAPI: !is3P,
     }) as ClientOptions['fetchOptions'],
     ...(resolvedFetch && {
       fetch: resolvedFetch,
     }),
   }
   logForDebugging(
-    `[API:provider-select] env(openai=${isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)}, bedrock=${isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)}, foundry=${isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)}, vertex=${isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)}), provider=${getAPIProvider()}, openai_base=${process.env.OPENAI_BASE_URL ?? ''}, openai_model=${process.env.OPENAI_MODEL ?? ''}`,
+    `[API:provider-select] env(openai=${isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)}, bedrock=${isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)}, foundry=${isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)}, vertex=${isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)}), provider=${provider}, openai_base=${process.env.OPENAI_BASE_URL ?? ''}, openai_model=${process.env.OPENAI_MODEL ?? ''}`,
   )
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) {
+  if (provider === 'openai') {
     logForDebugging('[API:provider-select] Using OpenAI shim client')
     const { createOpenAIShimClient } = await import('./openaiShim.js')
     return createOpenAIShimClient({
@@ -162,7 +166,7 @@ export async function getAnthropicClient({
       timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     }) as unknown as Anthropic
   }
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
+  if (provider === 'bedrock') {
     logForDebugging('[API:provider-select] Using Bedrock client')
     const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
     // Use region override for small fast model if specified
