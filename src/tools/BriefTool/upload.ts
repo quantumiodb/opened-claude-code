@@ -25,6 +25,7 @@ import {
 } from '../../bridge/bridgeConfig.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 
@@ -94,6 +95,11 @@ export async function uploadBriefAttachment(
   size: number,
   ctx: BriefUploadContext,
 ): Promise<string | undefined> {
+  // Brief attachment upload is only supported for the Anthropic provider (bridge mode)
+  if (getAPIProvider() !== 'firstParty') {
+    return undefined
+  }
+
   // Positive pattern so bun:bundle eliminates the entire body from
   // non-BRIDGE_MODE builds (negative `if (!feature(...)) return` does not).
   if (feature('BRIDGE_MODE')) {
