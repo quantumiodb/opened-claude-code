@@ -150,7 +150,11 @@ export async function getAnthropicClient({
       fetch: resolvedFetch,
     }),
   }
+  logForDebugging(
+    `[API:provider-select] env(openai=${isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)}, bedrock=${isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)}, foundry=${isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)}, vertex=${isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)}), provider=${getAPIProvider()}, openai_base=${process.env.OPENAI_BASE_URL ?? ''}, openai_model=${process.env.OPENAI_MODEL ?? ''}`,
+  )
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) {
+    logForDebugging('[API:provider-select] Using OpenAI shim client')
     const { createOpenAIShimClient } = await import('./openaiShim.js')
     return createOpenAIShimClient({
       defaultHeaders,
@@ -159,6 +163,7 @@ export async function getAnthropicClient({
     }) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
+    logForDebugging('[API:provider-select] Using Bedrock client')
     const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
     // Use region override for small fast model if specified
     const awsRegion =
@@ -197,6 +202,7 @@ export async function getAnthropicClient({
     return new AnthropicBedrock(bedrockArgs) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {
+    logForDebugging('[API:provider-select] Using Foundry client')
     const { AnthropicFoundry } = await import('@anthropic-ai/foundry-sdk')
     // Determine Azure AD token provider based on configuration
     // SDK reads ANTHROPIC_FOUNDRY_API_KEY by default
@@ -227,6 +233,7 @@ export async function getAnthropicClient({
     return new AnthropicFoundry(foundryArgs) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) {
+    logForDebugging('[API:provider-select] Using Vertex client')
     // Refresh GCP credentials if gcpAuthRefresh is configured and credentials are expired
     // This is similar to how we handle AWS credential refresh for Bedrock
     if (!isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
@@ -319,6 +326,7 @@ export async function getAnthropicClient({
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
   }
+  logForDebugging('[API:provider-select] Using direct Anthropic client')
 
   return new Anthropic(clientConfig)
 }
