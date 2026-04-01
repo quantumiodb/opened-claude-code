@@ -84,6 +84,7 @@
     "lru-cache": "^11.0.2",
     "marked": "^15.0.6",
     "modifiers-napi": "file:stubs/modifiers-napi",
+    "openai": "^6.33.0",
     "p-map": "^7.0.3",
     "picomatch": "^4.0.2",
     "plist": "^3.1.0",

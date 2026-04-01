@@ -13,7 +13,7 @@ import { useKeybinding } from '../keybindings/useKeybinding.js';
 import { queryHaiku } from '../services/api/claude.js';
 import { startsWithApiErrorPrefix } from '../services/api/errors.js';
 import type { Message } from '../types/message.js';
-import { checkAndRefreshOAuthTokenIfNeeded } from '../utils/auth.js';
+import { checkAndRefreshOAuthTokenIfNeeded, isUsing3PServices } from '../utils/auth.js';
 import { openBrowser } from '../utils/browser.js';
 import { logForDebugging } from '../utils/debug.js';
 import { env } from '../utils/env.js';
@@ -520,6 +520,13 @@ async function submitFeedback(data: FeedbackData, signal?: AbortSignal): Promise
   feedbackId?: string;
   isZdrOrg?: boolean;
 }> {
+  // Skip feedback submission when using 3P services
+  if (isUsing3PServices()) {
+    return {
+      success: false
+    };
+  }
+
   if (isEssentialTrafficOnly()) {
     return {
       success: false
