@@ -20,6 +20,7 @@ import {
   isAnthropicAuthEnabled,
 } from '../utils/auth.js'
 import { logForDebugging } from '../utils/debug.js'
+import { getAPIProvider } from '../utils/model/providers.js'
 import { getUserAgent } from '../utils/http.js'
 import { logError } from '../utils/log.js'
 import { getWebSocketTLSOptions } from '../utils/mtls.js'
@@ -96,6 +97,11 @@ type VoiceStreamMessage =
 // ─── Availability ──────────────────────────────────────────────────────
 
 export function isVoiceStreamAvailable(): boolean {
+  // voice_stream is only available for the Anthropic first-party provider
+  if (getAPIProvider() !== 'firstParty') {
+    return false
+  }
+
   // voice_stream uses the same OAuth as Claude Code — available when the
   // user is authenticated with Anthropic (Claude.ai subscriber or has
   // valid OAuth tokens).
@@ -112,6 +118,11 @@ export async function connectVoiceStream(
   callbacks: VoiceStreamCallbacks,
   options?: { language?: string; keyterms?: string[] },
 ): Promise<VoiceStreamConnection | null> {
+  // voice_stream is only supported for the Anthropic first-party provider
+  if (getAPIProvider() !== 'firstParty') {
+    return null
+  }
+
   // Ensure OAuth token is fresh before connecting
   await checkAndRefreshOAuthTokenIfNeeded()
 
