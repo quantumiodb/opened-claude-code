@@ -163,7 +163,7 @@ export function modelSupportsAutoMode(model: string): boolean {
     // External: firstParty-only at launch (PI probes not wired for
     // Bedrock/Vertex/Foundry yet). Checked before allowModels so the GB
     // override can't enable auto mode on unsupported providers.
-    if (process.env.USER_TYPE !== 'ant' && getAPIProvider() !== 'firstParty') {
+    if (process.env.USER_TYPE !== 'ant' && getAPIProvider() !== 'firstParty' && getAPIProvider() !== 'openai') {
       return false
     }
     // GrowthBook override: tengu_auto_mode_config.allowModels force-enables
@@ -179,6 +179,10 @@ export function modelSupportsAutoMode(model: string): boolean {
         am => am.toLowerCase() === rawLower || am.toLowerCase() === m,
       )
     ) {
+      return true
+    }
+    // OpenAI provider: allow all models (no Claude-specific allowlist needed)
+    if (getAPIProvider() === 'openai') {
       return true
     }
     if (process.env.USER_TYPE === 'ant') {
