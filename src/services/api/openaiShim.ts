@@ -230,6 +230,7 @@ async function* openaiStreamToAnthropic(
   let contentBlockIndex = 0
   const activeToolCalls = new Map<number, { id: string; name: string; index: number }>()
   let hasEmittedContentStart = false
+  let hasProcessedFinishReason = false
 
   yield {
     type: 'message_start',
@@ -323,7 +324,8 @@ async function* openaiStreamToAnthropic(
       }
 
       // Finish
-      if (choice.finish_reason) {
+      if (choice.finish_reason && !hasProcessedFinishReason) {
+        hasProcessedFinishReason = true
         if (hasEmittedContentStart) {
           yield { type: 'content_block_stop', index: contentBlockIndex }
         }
