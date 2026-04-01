@@ -68,7 +68,7 @@ export const WebFetchTool = buildTool({
   searchHint: 'fetch and extract content from a URL',
   // 100K chars - tool result persistence threshold
   maxResultSizeChars: 100_000,
-  shouldDefer: true,
+  shouldDefer: false,
   async description(input) {
     const { url } = input as { url: string }
     try {
