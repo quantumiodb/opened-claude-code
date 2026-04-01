@@ -1590,12 +1590,14 @@ export function is1PApiCustomer(): boolean {
   // 2. Vertex AI users
   // 3. AWS Bedrock users
   // 4. Foundry users
+  // 5. OpenAI users
 
-  // Exclude Vertex, Bedrock, and Foundry customers
+  // Exclude Vertex, Bedrock, Foundry, and OpenAI customers
   if (
     isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)
   ) {
     return false
   }
