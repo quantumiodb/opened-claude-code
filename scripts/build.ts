@@ -14,6 +14,7 @@ import { execSync } from 'child_process'
 // Features to enable at build time
 const ENABLED_FEATURES = [
   'TRANSCRIPT_CLASSIFIER',
+  'AGENT_TRIGGERS',
 ]
 
 const SRC_DIR = join(import.meta.dir, '..', 'src')
