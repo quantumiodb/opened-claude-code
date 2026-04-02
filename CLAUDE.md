@@ -12,6 +12,7 @@ A **source snapshot** of Anthropic's Claude Code CLI, extracted from a source ma
 bun install              # Install dependencies (first time)
 bun run build            # Bundle CLI → dist/cli.js (24 MB, ~360ms)
 bun run typecheck        # TypeScript check (strict mode relaxed; ~2500 residual errors from stub types)
+bun run test             # Run tests (vitest, matches src/**/__tests__/**/*.test.ts)
 bun dist/cli.js --help   # Run the built CLI
 bun dist/cli.js -v       # Print version
 
