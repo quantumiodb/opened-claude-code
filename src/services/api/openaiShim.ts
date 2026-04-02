@@ -105,6 +105,16 @@ function shouldIncludeReasoningContent(): boolean {
   return process.env.OPENAI_SHIM_INCLUDE_REASONING === '1'
 }
 
+import { appendFileSync } from 'fs'
+function shimDebug(msg: string): void {
+  if (!process.env.OPENAI_SHIM_DEBUG && !process.env.CLAUDE_OPENAI_TOOL_DEBUG) return
+  try {
+    appendFileSync('/tmp/shim-debug.log', `[${new Date().toISOString()}] ${msg}\n`)
+  } catch {
+    // ignore
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ToolNameResolver — encapsulates known-tool-name lookup
 // ---------------------------------------------------------------------------
@@ -279,6 +289,58 @@ export function updateToolNameState(
 }
 
 // ---------------------------------------------------------------------------
+// XML tool call parsing — fallback for models that emit tool calls as text
+// ---------------------------------------------------------------------------
+
+interface ParsedXmlToolCall {
+  toolName: string
+  args: Record<string, string>
+}
+
+/**
+ * Default values for required parameters that models commonly omit when
+ * guessing deferred tool schemas via XML text-based tool calls.
+ */
+const XML_TOOL_CALL_PARAM_DEFAULTS: Record<string, Record<string, string>> = {
+  WebFetch: { prompt: 'Extract and summarize the content of this page' },
+}
+
+/**
+ * Parse XML tool call format used by some models (e.g. GLM4.7) when they
+ * don't use the structured tool_calls mechanism.
+ *
+ * Format: <tool_call>ToolName<arg_key>key</arg_key><arg_value>value</arg_value>...</tool_call>
+ */
+export function parseXmlToolCalls(text: string): ParsedXmlToolCall[] | null {
+  const results: ParsedXmlToolCall[] = []
+  const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g
+  let match
+  while ((match = toolCallRegex.exec(text)) !== null) {
+    const inner = match[1]
+    const nameEnd = inner.indexOf('<arg_key>')
+    if (nameEnd === -1) continue
+    const toolName = inner.slice(0, nameEnd).trim()
+    if (!toolName) continue
+
+    const args: Record<string, string> = {}
+    const kvRegex = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g
+    let kvMatch
+    while ((kvMatch = kvRegex.exec(inner)) !== null) {
+      args[kvMatch[1].trim()] = kvMatch[2]
+    }
+
+    results.push({ toolName, args })
+  }
+
+  return results.length > 0 ? results : null
+}
+
+/** Check if text looks like it might be an incomplete XML tool call */
+export function looksLikeXmlToolCallStart(text: string): boolean {
+  return text.includes('<tool_call>') && !text.includes('</tool_call>')
+}
+
+// ---------------------------------------------------------------------------
 // StreamState — manages all mutable state for the streaming generator
 // ---------------------------------------------------------------------------
 
@@ -286,8 +348,11 @@ class StreamState {
   nextBlockIndex = 0
   hasOpenTextBlock = false
   sawFinishReason = false
+  finishReason: string | null = null
   textSuppressed = false
   readonly toolStates = new Map<number, StreamToolState>()
+  /** Buffer for accumulating XML tool calls that may span multiple text chunks */
+  xmlBuffer = ''
 
   /** Close current text block if one is open */
   closeTextBlock(): AnthropicStreamEvent[] {
@@ -363,6 +428,57 @@ class StreamState {
     return created
   }
 
+  /**
+   * Emit tool_use events from parsed XML tool calls.
+   * Used as fallback when models output tool calls as text instead of
+   * using the structured tool_calls mechanism.
+   */
+  emitXmlToolCalls(parsed: ParsedXmlToolCall[]): AnthropicStreamEvent[] {
+    const events: AnthropicStreamEvent[] = [...this.closeTextBlock()]
+
+    for (const tc of parsed) {
+      // Fill in defaults for required params the model may have omitted
+      const defaults = XML_TOOL_CALL_PARAM_DEFAULTS[tc.toolName]
+      if (defaults) {
+        for (const [key, value] of Object.entries(defaults)) {
+          if (!(key in tc.args)) {
+            tc.args[key] = value
+          }
+        }
+      }
+
+      const toolIndex = this.toolStates.size
+      const toolState = this.getOrCreateTool(toolIndex)
+      toolState.id = `call_${Math.random().toString(36).slice(2)}`
+      toolState.name = tc.toolName
+      toolState.nameLocked = true
+      toolState.blockIndex = this.nextBlockIndex
+      toolState.started = true
+
+      events.push({
+        type: 'content_block_start',
+        index: toolState.blockIndex,
+        content_block: {
+          type: 'tool_use',
+          id: toolState.id,
+          name: toolState.name,
+          input: {},
+        },
+      })
+      this.nextBlockIndex++
+
+      const argsJson = JSON.stringify(tc.args)
+      events.push({
+        type: 'content_block_delta',
+        index: toolState.blockIndex,
+        delta: { type: 'input_json_delta', partial_json: argsJson },
+      })
+    }
+
+    this.textSuppressed = true
+    return events
+  }
+
   /** Whether any tool call exists (started or has pending name/args) */
   get hasAnyToolCall(): boolean {
     for (const [, state] of this.toolStates) {
@@ -379,6 +495,7 @@ class StreamState {
   finalize(resolver: ToolNameResolver | null, opts: {
     flushPending: boolean
     finishReason: string | null
+    inputTokens: number
     outputTokens: number
   }): AnthropicStreamEvent[] {
     const events: AnthropicStreamEvent[] = [...this.closeTextBlock()]
@@ -404,7 +521,10 @@ class StreamState {
     events.push({
       type: 'message_delta',
       delta: { stop_reason: stopReason, stop_sequence: null },
-      usage: { output_tokens: opts.outputTokens },
+      usage: {
+        input_tokens: opts.inputTokens,
+        output_tokens: opts.outputTokens,
+      },
     })
     return events
   }
@@ -687,6 +807,10 @@ async function* openaiStreamToAnthropic(
   resolver: ToolNameResolver | null,
 ): AsyncGenerator<AnthropicStreamEvent> {
   const state = new StreamState()
+  // Track cumulative usage from OpenAI stream chunks. The final chunk
+  // (with choices=[]) carries the full usage when include_usage is set.
+  let streamInputTokens = 0
+  let streamOutputTokens = 0
 
   yield {
     type: 'message_start',
@@ -708,6 +832,14 @@ async function* openaiStreamToAnthropic(
   }
 
   for await (const chunk of stream) {
+    // Capture usage from any chunk — OpenAI sends the final usage summary
+    // in a chunk with empty choices when stream_options.include_usage is set.
+    if (chunk.usage) {
+      const u = chunk.usage as { prompt_tokens?: number; completion_tokens?: number }
+      if (u.prompt_tokens) streamInputTokens = u.prompt_tokens
+      if (u.completion_tokens) streamOutputTokens = u.completion_tokens
+    }
+
     for (const choice of chunk.choices ?? []) {
       const delta = choice.delta ?? {}
       const deltaRecord = delta as Record<string, unknown>
@@ -723,24 +855,62 @@ async function* openaiStreamToAnthropic(
         contentChunk ||
         (shouldIncludeReasoningContent() ? reasoningChunk : '')
 
+      shimDebug(`delta: content=${contentChunk ? JSON.stringify(contentChunk) : 'null'} reasoning=${reasoningChunk ? JSON.stringify(reasoningChunk) : 'null'} tool_calls=${delta.tool_calls ? JSON.stringify(delta.tool_calls.map((t: any) => ({ index: t.index, id: t.id, fn: t.function }))) : 'null'} finish=${choice.finish_reason ?? 'null'}`)
+
       if (delta.tool_calls && delta.tool_calls.length > 0 && !state.textSuppressed) {
         state.textSuppressed = true
         yield* state.closeTextBlock()
       }
 
       if (textChunk && !state.textSuppressed) {
-        if (!state.hasOpenTextBlock) {
-          yield {
-            type: 'content_block_start',
-            index: state.nextBlockIndex,
-            content_block: { type: 'text', text: '' },
+        // Check for XML tool calls in text content (fallback for models
+        // that emit tool calls as text instead of structured tool_calls)
+        const textToCheck = state.xmlBuffer + textChunk
+
+        if (textToCheck.includes('</tool_call>')) {
+          // Complete XML tool call(s) found
+          const parsed = parseXmlToolCalls(textToCheck)
+          if (parsed) {
+            shimDebug(`xml_tool_call: parsed ${parsed.length} tool(s): ${parsed.map(t => t.toolName).join(', ')}`)
+            yield* state.emitXmlToolCalls(parsed)
+            state.xmlBuffer = ''
+          } else {
+            // Had closing tag but didn't parse — emit as normal text
+            state.xmlBuffer = ''
+            if (!state.hasOpenTextBlock) {
+              yield {
+                type: 'content_block_start',
+                index: state.nextBlockIndex,
+                content_block: { type: 'text', text: '' },
+              }
+              state.hasOpenTextBlock = true
+            }
+            yield {
+              type: 'content_block_delta',
+              index: state.nextBlockIndex,
+              delta: { type: 'text_delta', text: textToCheck },
+            }
           }
-          state.hasOpenTextBlock = true
-        }
-        yield {
-          type: 'content_block_delta',
-          index: state.nextBlockIndex,
-          delta: { type: 'text_delta', text: textChunk },
+        } else if (looksLikeXmlToolCallStart(textToCheck)) {
+          // Incomplete XML tool call — buffer and wait for more
+          state.xmlBuffer = textToCheck
+          shimDebug(`xml_tool_call: buffering incomplete XML (${state.xmlBuffer.length} chars)`)
+        } else {
+          // Normal text — flush any buffer and emit
+          state.xmlBuffer = ''
+          if (!state.hasOpenTextBlock) {
+            yield {
+              type: 'content_block_start',
+              index: state.nextBlockIndex,
+              content_block: { type: 'text', text: '' },
+            }
+            state.hasOpenTextBlock = true
+          }
+          yield {
+            type: 'content_block_delta',
+            index: state.nextBlockIndex,
+            delta: { type: 'text_delta', text: textChunk },
+          }
         }
       }
 
@@ -773,26 +943,42 @@ async function* openaiStreamToAnthropic(
       }
 
       // -- Finish reason --
+      // Record the finish reason but don't finalize yet — the OpenAI API
+      // sends the usage summary in a separate final chunk (choices=[])
+      // AFTER the finish_reason chunk. Deferring finalize to after the
+      // for-await loop ensures we have the complete token counts.
       if (choice.finish_reason && !state.sawFinishReason) {
+        if (state.xmlBuffer) {
+          const parsed = parseXmlToolCalls(state.xmlBuffer)
+          if (parsed) {
+            shimDebug(`xml_tool_call (flush): parsed ${parsed.length} tool(s) from buffer`)
+            yield* state.emitXmlToolCalls(parsed)
+          }
+          state.xmlBuffer = ''
+        }
+
         state.sawFinishReason = true
-        yield* state.finalize(resolver, {
-          flushPending: true,
-          finishReason: choice.finish_reason,
-          outputTokens:
-            (chunk.usage as { completion_tokens?: number } | null)
-              ?.completion_tokens ?? 0,
-        })
+        state.finishReason = choice.finish_reason
       }
     }
   }
 
-  if (!state.sawFinishReason) {
-    yield* state.finalize(resolver, {
-      flushPending: false,
-      finishReason: null,
-      outputTokens: 0,
-    })
+  // Flush any remaining XML buffer at stream end
+  if (state.xmlBuffer) {
+    const parsed = parseXmlToolCalls(state.xmlBuffer)
+    if (parsed) {
+      shimDebug(`xml_tool_call (end): parsed ${parsed.length} tool(s) from buffer`)
+      yield* state.emitXmlToolCalls(parsed)
+    }
+    state.xmlBuffer = ''
   }
+
+  yield* state.finalize(resolver, {
+    flushPending: state.sawFinishReason,
+    finishReason: state.finishReason,
+    inputTokens: streamInputTokens,
+    outputTokens: streamOutputTokens,
+  })
 
   yield { type: 'message_stop' }
 }
