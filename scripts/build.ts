@@ -19,6 +19,7 @@ const ENABLED_FEATURES = [
   'MCP_RICH_OUTPUT',
   'MCP_SKILLS',
   'HISTORY_PICKER',
+  'TREE_SITTER_BASH',
 ]
 
 const SRC_DIR = join(import.meta.dir, '..', 'src')
