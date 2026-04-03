@@ -6,6 +6,7 @@
   "scripts": {
     "typecheck": "bun run tsc --noEmit",
     "build": "bun scripts/build.ts",
+    "build:binary": "bun scripts/build.ts --binary",
     "start": "bun dist/cli.js",
     "dev": "bun run build && bun dist/cli.js",
     "test": "vitest run"
