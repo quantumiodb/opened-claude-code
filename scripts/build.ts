@@ -15,6 +15,7 @@ import { execSync } from 'child_process'
 const ENABLED_FEATURES = [
   'TRANSCRIPT_CLASSIFIER',
   'AGENT_TRIGGERS',
+  'BUDDY',
 ]
 
 const SRC_DIR = join(import.meta.dir, '..', 'src')
