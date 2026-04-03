@@ -16,6 +16,9 @@ const ENABLED_FEATURES = [
   'TRANSCRIPT_CLASSIFIER',
   'AGENT_TRIGGERS',
   'BUDDY',
+  'MCP_RICH_OUTPUT',
+  'MCP_SKILLS',
+  'HISTORY_PICKER',
 ]
 
 const SRC_DIR = join(import.meta.dir, '..', 'src')
