@@ -67,7 +67,8 @@ const MACRO_DEFINES =
   `--define 'MACRO.NATIVE_PACKAGE_URL=""' ` +
   `--define 'MACRO.FEEDBACK_CHANNEL=""' ` +
   `--define 'MACRO.ISSUES_EXPLAINER=""' ` +
-  `--define 'MACRO.VERSION_CHANGELOG=""'`
+  `--define 'MACRO.VERSION_CHANGELOG=""' ` +
+  `--define 'process.env.USER_TYPE="external"'`
 
 // Phase 2: Run bun build
 try {

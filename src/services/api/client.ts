@@ -415,7 +415,6 @@ function buildFetch(
     // Only applies to /v1/messages requests when NATIVE_CLIENT_ATTESTATION is enabled.
     if (
       feature('NATIVE_CLIENT_ATTESTATION') &&
-      typeof Bun !== 'undefined' &&
       resolvedUrl &&
       typeof init?.body === 'string' &&
       hasCchPlaceholder(init.body)
@@ -423,7 +422,7 @@ function buildFetch(
       try {
         if (new URL(resolvedUrl).pathname.endsWith('/v1/messages')) {
           const bodyBytes = new TextEncoder().encode(init.body)
-          const cch = computeCch(bodyBytes)
+          const cch = await computeCch(bodyBytes)
           init = { ...init, body: replaceCchPlaceholder(init.body, cch) }
           logForDebugging(`[API REQUEST] cch computed: ${cch}`)
         }

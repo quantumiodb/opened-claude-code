@@ -18,13 +18,17 @@ const SEED = BigInt('0x6E52736AC806831E')
 const MASK = BigInt('0xFFFFF')
 
 type XxHashInstance = Awaited<ReturnType<typeof xxhash>>
-let instance: XxHashInstance | null = null
+let _instance: XxHashInstance | null = null
+
+// Eagerly start WASM initialization so it's ready before the first API call.
+// The promise is cached; concurrent callers all await the same init.
+const _initPromise = xxhash().then(h => {
+  _instance = h
+})
 
 async function getHasher(): Promise<XxHashInstance> {
-  if (!instance) {
-    instance = await xxhash()
-  }
-  return instance
+  if (!_instance) await _initPromise
+  return _instance!
 }
 
 export function hasCchPlaceholder(body: string): boolean {
@@ -34,13 +38,13 @@ export function hasCchPlaceholder(body: string): boolean {
 /**
  * Compute the cch value for the given request body bytes.
  * Uses xxhash-wasm (works on Bun and Node.js), masked to 20 bits (5 hex chars).
+ * Async only on the very first call while WASM loads; subsequent calls resolve instantly.
  */
 export async function computeCch(bodyBytes: Uint8Array): Promise<string> {
   const hasher = await getHasher()
   const h = hasher.create64(SEED)
   h.update(bodyBytes)
-  const hash = h.digest() & MASK
-  return hash.toString(16).padStart(5, '0')
+  return (h.digest() & MASK).toString(16).padStart(5, '0')
 }
 
 export function replaceCchPlaceholder(body: string, cch: string): string {
