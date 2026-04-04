@@ -11,9 +11,21 @@
  * Reference: https://a10k.co/b/reverse-engineering-claude-code-cch.html
  */
 
+import xxhash from 'xxhash-wasm'
+
 export const CCH_PLACEHOLDER = 'cch=00000'
 const SEED = BigInt('0x6E52736AC806831E')
 const MASK = BigInt('0xFFFFF')
+
+type XxHashInstance = Awaited<ReturnType<typeof xxhash>>
+let instance: XxHashInstance | null = null
+
+async function getHasher(): Promise<XxHashInstance> {
+  if (!instance) {
+    instance = await xxhash()
+  }
+  return instance
+}
 
 export function hasCchPlaceholder(body: string): boolean {
   return body.includes(CCH_PLACEHOLDER)
@@ -21,11 +33,13 @@ export function hasCchPlaceholder(body: string): boolean {
 
 /**
  * Compute the cch value for the given request body bytes.
- * Uses Bun's native xxHash64 with a fixed seed, masked to 20 bits (5 hex chars).
- * Falls back to '00000' in non-Bun environments (e.g. Node.js).
+ * Uses xxhash-wasm (works on Bun and Node.js), masked to 20 bits (5 hex chars).
  */
-export function computeCch(bodyBytes: Uint8Array): string {
-  const hash = (Bun as any).hash.xxHash64(bodyBytes, SEED) & MASK
+export async function computeCch(bodyBytes: Uint8Array): Promise<string> {
+  const hasher = await getHasher()
+  const h = hasher.create64(SEED)
+  h.update(bodyBytes)
+  const hash = h.digest() & MASK
   return hash.toString(16).padStart(5, '0')
 }
 
