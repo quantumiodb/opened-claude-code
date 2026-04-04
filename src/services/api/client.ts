@@ -1,6 +1,12 @@
 import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
+import { feature } from 'bun:bundle'
 import type { GoogleAuth } from 'google-auth-library'
+import {
+  computeCch,
+  hasCchPlaceholder,
+  replaceCchPlaceholder,
+} from '../cch.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getAnthropicApiKey,
@@ -385,7 +391,7 @@ function buildFetch(
   // and unknown headers risk rejection by strict proxies (inc-4029 class).
   const injectClientRequestId =
     getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
-  return (input, init) => {
+  return async (input, init) => {
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const headers = new Headers(init?.headers)
     // Generate a client-side request ID so timeouts (which return no server
@@ -394,15 +400,36 @@ function buildFetch(
     if (injectClientRequestId && !headers.has(CLIENT_REQUEST_ID_HEADER)) {
       headers.set(CLIENT_REQUEST_ID_HEADER, randomUUID())
     }
+    let resolvedUrl: string | undefined
     try {
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-      const url = input instanceof Request ? input.url : String(input)
+      resolvedUrl = input instanceof Request ? input.url : String(input)
       const id = headers.get(CLIENT_REQUEST_ID_HEADER)
       logForDebugging(
-        `[API REQUEST] ${new URL(url).pathname}${id ? ` ${CLIENT_REQUEST_ID_HEADER}=${id}` : ''} source=${source ?? 'unknown'}`,
+        `[API REQUEST] ${new URL(resolvedUrl).pathname}${id ? ` ${CLIENT_REQUEST_ID_HEADER}=${id}` : ''} source=${source ?? 'unknown'}`,
       )
     } catch {
       // never let logging crash the fetch
+    }
+    // Replace cch=00000 placeholder with computed xxHash64 body hash.
+    // Only applies to /v1/messages requests when NATIVE_CLIENT_ATTESTATION is enabled.
+    if (
+      feature('NATIVE_CLIENT_ATTESTATION') &&
+      typeof Bun !== 'undefined' &&
+      resolvedUrl &&
+      typeof init?.body === 'string' &&
+      hasCchPlaceholder(init.body)
+    ) {
+      try {
+        if (new URL(resolvedUrl).pathname.endsWith('/v1/messages')) {
+          const bodyBytes = new TextEncoder().encode(init.body)
+          const cch = computeCch(bodyBytes)
+          init = { ...init, body: replaceCchPlaceholder(init.body, cch) }
+          logForDebugging(`[API REQUEST] cch computed: ${cch}`)
+        }
+      } catch {
+        // never let cch computation crash the fetch
+      }
     }
     return inner(input, { ...init, headers })
   }
