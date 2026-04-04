@@ -5,6 +5,7 @@ import type { GoogleAuth } from 'google-auth-library'
 import {
   computeCch,
   hasCchPlaceholder,
+  initCch,
   replaceCchPlaceholder,
 } from '../cch.js'
 import {
@@ -104,6 +105,7 @@ export async function getAnthropicClient({
   fetchOverride?: ClientOptions['fetch']
   source?: string
 }): Promise<Anthropic> {
+  if (feature('NATIVE_CLIENT_ATTESTATION')) await initCch
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP
@@ -422,7 +424,7 @@ function buildFetch(
       try {
         if (new URL(resolvedUrl).pathname.endsWith('/v1/messages')) {
           const bodyBytes = new TextEncoder().encode(init.body)
-          const cch = await computeCch(bodyBytes)
+          const cch = computeCch(bodyBytes)
           init = { ...init, body: replaceCchPlaceholder(init.body, cch) }
           logForDebugging(`[API REQUEST] cch computed: ${cch}`)
         }

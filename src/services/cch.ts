@@ -20,29 +20,22 @@ const MASK = BigInt('0xFFFFF')
 type XxHashInstance = Awaited<ReturnType<typeof xxhash>>
 let _instance: XxHashInstance | null = null
 
-// Eagerly start WASM initialization so it's ready before the first API call.
-// The promise is cached; concurrent callers all await the same init.
-const _initPromise = xxhash().then(h => {
-  _instance = h
-})
-
-async function getHasher(): Promise<XxHashInstance> {
-  if (!_instance) await _initPromise
-  return _instance!
-}
+// Eagerly start WASM initialization at module load time.
+// Call initCch() once (e.g. in getAnthropicClient) before using computeCch.
+export const initCch: Promise<void> = xxhash().then(h => { _instance = h })
 
 export function hasCchPlaceholder(body: string): boolean {
   return body.includes(CCH_PLACEHOLDER)
 }
 
 /**
- * Compute the cch value for the given request body bytes.
+ * Compute the cch value for the given request body bytes (synchronous).
+ * initCch must have been awaited before the first call.
  * Uses xxhash-wasm (works on Bun and Node.js), masked to 20 bits (5 hex chars).
- * Async only on the very first call while WASM loads; subsequent calls resolve instantly.
  */
-export async function computeCch(bodyBytes: Uint8Array): Promise<string> {
-  const hasher = await getHasher()
-  const h = hasher.create64(SEED)
+export function computeCch(bodyBytes: Uint8Array): string {
+  if (!_instance) throw new Error('cch: xxhash not initialized — await initCch first')
+  const h = _instance.create64(SEED)
   h.update(bodyBytes)
   return (h.digest() & MASK).toString(16).padStart(5, '0')
 }
