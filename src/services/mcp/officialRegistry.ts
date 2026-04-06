@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 
 type RegistryServer = {
   server: {
@@ -32,6 +33,12 @@ function normalizeUrl(url: string): string | undefined {
  */
 export async function prefetchOfficialMcpUrls(): Promise<void> {
   if (process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC) {
+    return
+  }
+  // The official MCP registry is hosted on api.anthropic.com. Skip this
+  // prefetch when using 3P providers (OpenAI/Bedrock/Vertex/Foundry) to avoid
+  // unexpected Anthropic network traffic in restricted environments.
+  if (getAPIProvider() !== 'firstParty') {
     return
   }
 
