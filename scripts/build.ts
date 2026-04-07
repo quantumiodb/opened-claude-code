@@ -21,6 +21,7 @@ const ENABLED_FEATURES = [
   'HISTORY_PICKER',
   'TREE_SITTER_BASH',
   'NATIVE_CLIENT_ATTESTATION',
+  'BRIDGE_MODE',
 ]
 
 const SRC_DIR = join(import.meta.dir, '..', 'src')
