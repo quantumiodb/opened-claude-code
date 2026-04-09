@@ -47,6 +47,14 @@ interface AnthropicUsage {
   cache_read_input_tokens: number
 }
 
+interface OpenAIUsageLike {
+  prompt_tokens?: number
+  completion_tokens?: number
+  prompt_tokens_details?: {
+    cached_tokens?: number
+  }
+}
+
 type AnthropicStreamEvent =
   | { type: 'message_start'; message: Record<string, unknown> }
   | { type: 'content_block_start'; index: number; content_block: Record<string, unknown> }
@@ -497,6 +505,7 @@ class StreamState {
     finishReason: string | null
     inputTokens: number
     outputTokens: number
+    cachedInputTokens: number
   }): AnthropicStreamEvent[] {
     const events: AnthropicStreamEvent[] = [...this.closeTextBlock()]
 
@@ -524,6 +533,8 @@ class StreamState {
       usage: {
         input_tokens: opts.inputTokens,
         output_tokens: opts.outputTokens,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: opts.cachedInputTokens,
       },
     })
     return events
@@ -733,6 +744,17 @@ function normalizeFinishReasonToStopReason(
   return 'end_turn'
 }
 
+export function extractAnthropicUsage(
+  usage: OpenAIUsageLike | null | undefined,
+): AnthropicUsage {
+  return {
+    input_tokens: usage?.prompt_tokens ?? 0,
+    output_tokens: usage?.completion_tokens ?? 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: usage?.prompt_tokens_details?.cached_tokens ?? 0,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Non-streaming response conversion (top-level, no `this` dependency)
 // ---------------------------------------------------------------------------
@@ -788,12 +810,7 @@ function convertNonStreamingResponse(
     model: response.model ?? model,
     stop_reason: stopReason,
     stop_sequence: null,
-    usage: {
-      input_tokens: response.usage?.prompt_tokens ?? 0,
-      output_tokens: response.usage?.completion_tokens ?? 0,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
-    },
+    usage: extractAnthropicUsage(response.usage),
   }
 }
 
@@ -811,6 +828,7 @@ async function* openaiStreamToAnthropic(
   // (with choices=[]) carries the full usage when include_usage is set.
   let streamInputTokens = 0
   let streamOutputTokens = 0
+  let streamCachedInputTokens = 0
 
   yield {
     type: 'message_start',
@@ -835,9 +853,12 @@ async function* openaiStreamToAnthropic(
     // Capture usage from any chunk — OpenAI sends the final usage summary
     // in a chunk with empty choices when stream_options.include_usage is set.
     if (chunk.usage) {
-      const u = chunk.usage as { prompt_tokens?: number; completion_tokens?: number }
+      const u = chunk.usage as OpenAIUsageLike
       if (u.prompt_tokens) streamInputTokens = u.prompt_tokens
       if (u.completion_tokens) streamOutputTokens = u.completion_tokens
+      if (u.prompt_tokens_details?.cached_tokens !== undefined) {
+        streamCachedInputTokens = u.prompt_tokens_details.cached_tokens
+      }
     }
 
     for (const choice of chunk.choices ?? []) {
@@ -978,6 +999,7 @@ async function* openaiStreamToAnthropic(
     finishReason: state.finishReason,
     inputTokens: streamInputTokens,
     outputTokens: streamOutputTokens,
+    cachedInputTokens: streamCachedInputTokens,
   })
 
   yield { type: 'message_stop' }

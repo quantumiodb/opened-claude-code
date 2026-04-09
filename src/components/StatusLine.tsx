@@ -7,7 +7,7 @@ import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js';
 import { getIsRemoteMode, getKairosActive, getMainThreadAgentType, getOriginalCwd, getSdkBetas, getSessionId } from '../bootstrap/state.js';
 import { DEFAULT_OUTPUT_STYLE_NAME } from '../constants/outputStyles.js';
 import { useNotifications } from '../context/notifications.js';
-import { getTotalAPIDuration, getTotalCost, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens } from '../cost-tracker.js';
+import { getTotalAPIDuration, getTotalCacheCreationInputTokens, getTotalCacheReadInputTokens, getTotalCost, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens } from '../cost-tracker.js';
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
 import { type ReadonlySettings, useSettings } from '../hooks/useSettings.js';
 import { Ansi, Box, Text } from '../ink.js';
@@ -43,6 +43,11 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
   });
   const outputStyleName = settings?.outputStyle || DEFAULT_OUTPUT_STYLE_NAME;
   const currentUsage = getCurrentUsage(messages);
+  const totalInputTokens = getTotalInputTokens();
+  const totalOutputTokens = getTotalOutputTokens();
+  const totalCacheReadInputTokens = getTotalCacheReadInputTokens();
+  const totalCacheCreationInputTokens = getTotalCacheCreationInputTokens();
+  const cacheHit = totalInputTokens > 0 ? totalCacheReadInputTokens / totalInputTokens : null;
   const contextWindowSize = getContextWindowForModel(runtimeModel, getSdkBetas());
   const contextPercentages = calculateContextPercentages(currentUsage, contextWindowSize);
   const sessionId = getSessionId();
@@ -87,9 +92,14 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
       total_lines_added: getTotalLinesAdded(),
       total_lines_removed: getTotalLinesRemoved()
     },
+    cache: {
+      total_cache_read_input_tokens: totalCacheReadInputTokens,
+      total_cache_creation_input_tokens: totalCacheCreationInputTokens,
+      cache_hit: cacheHit
+    },
     context_window: {
-      total_input_tokens: getTotalInputTokens(),
-      total_output_tokens: getTotalOutputTokens(),
+      total_input_tokens: totalInputTokens,
+      total_output_tokens: totalOutputTokens,
       context_window_size: contextWindowSize,
       current_usage: currentUsage,
       used_percentage: contextPercentages.used,
