@@ -69,7 +69,8 @@ const MACRO_DEFINES =
   `--define 'MACRO.FEEDBACK_CHANNEL=""' ` +
   `--define 'MACRO.ISSUES_EXPLAINER=""' ` +
   `--define 'MACRO.VERSION_CHANGELOG=""' ` +
-  `--define 'process.env.USER_TYPE="external"'`
+  `--define 'process.env.USER_TYPE="external"' ` +
+  `--define 'process.env.CCR_FORCE_BUNDLE="true"'`
 
 // Phase 2: Run bun build
 try {
