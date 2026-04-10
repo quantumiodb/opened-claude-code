@@ -5,6 +5,7 @@ import { useInterval } from 'usehooks-ts';
 import { useUpdateNotification } from '../hooks/useUpdateNotification.js';
 import { Box, Text } from '../ink.js';
 import { type AutoUpdaterResult, getLatestVersion, getMaxVersion, type InstallStatus, installGlobalPackage, shouldSkipVersion } from '../utils/autoUpdater.js';
+import { getLatestVersionIfEnabled } from '../utils/autoUpdaterGate.js';
 import { getGlobalConfig, isAutoUpdaterDisabled } from '../utils/config.js';
 import { logForDebugging } from '../utils/debug.js';
 import { getCurrentInstallationType } from '../utils/doctorDiagnostic.js';
@@ -55,8 +56,18 @@ export function AutoUpdater({
     }
     const currentVersion = MACRO.VERSION;
     const channel = getInitialSettings()?.autoUpdatesChannel ?? 'latest';
-    let latestVersion = await getLatestVersion(channel);
     const isDisabled = isAutoUpdaterDisabled();
+    if (isDisabled) {
+      logForDebugging('AutoUpdater: Skipping update check (auto-updater disabled)');
+      return;
+    }
+    let latestVersion = await getLatestVersionIfEnabled(channel, {
+      isDisabled,
+      fetchLatestVersion: getLatestVersion
+    });
+    if (!latestVersion) {
+      return;
+    }
 
     // Check if max version is set (server-side kill switch for auto-updates)
     const maxVersion = await getMaxVersion();

@@ -10,6 +10,7 @@ import {
   parseDebugFilter,
   shouldShowDebugMessage,
 } from './debugFilter.js'
+import { wasDebugLoggingAlreadyActive } from './debugGate.js'
 import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 import { writeToStderr } from './process.js'
@@ -62,7 +63,7 @@ export const isDebugMode = memoize((): boolean => {
  * with --debug. Returns true if logging was already active.
  */
 export function enableDebugLogging(): boolean {
-  const wasActive = isDebugMode() || process.env.USER_TYPE === 'ant'
+  const wasActive = wasDebugLoggingAlreadyActive(isDebugMode())
   runtimeDebugEnabled = true
   isDebugMode.cache.clear?.()
   return wasActive

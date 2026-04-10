@@ -343,6 +343,7 @@ export async function getLatestVersion(
   return result.stdout.trim()
 }
 
+
 export type NpmDistTags = {
   latest: string | null
   stable: string | null
