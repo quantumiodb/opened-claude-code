@@ -96,7 +96,7 @@ import {
   readMailbox,
   writeToMailbox,
 } from '../teammateMailbox.js'
-import { unregisterAgent as unregisterPerfettoAgent } from '../telemetry/perfettoTracing.js'
+import { unregisterAgent as unregisterPerfettoAgent } from '../telemetry.js'
 import { createContentReplacementState } from '../toolResultStorage.js'
 import { TEAM_LEAD_NAME } from './constants.js'
 import {

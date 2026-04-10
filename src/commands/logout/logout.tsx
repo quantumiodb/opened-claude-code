@@ -19,7 +19,7 @@ export async function performLogout({
   // Flush telemetry BEFORE clearing credentials to prevent org data leakage
   const {
     flushTelemetry
-  } = await import('../../utils/telemetry/instrumentation.js');
+  } = await import('../../utils/telemetry.js');
   await flushTelemetry();
   await removeApiKey();
 

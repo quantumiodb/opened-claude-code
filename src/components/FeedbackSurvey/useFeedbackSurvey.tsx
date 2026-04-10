@@ -9,7 +9,7 @@ import { isEnvTruthy } from '../../utils/envUtils.js';
 import { getLastAssistantMessage } from '../../utils/messages.js';
 import { getMainLoopModel } from '../../utils/model/model.js';
 import { getInitialSettings } from '../../utils/settings/settings.js';
-import { logOTelEvent } from '../../utils/telemetry/events.js';
+import { logOTelEvent } from '../../utils/telemetry.js';
 import { submitTranscriptShare, type TranscriptShareTrigger } from './submitTranscriptShare.js';
 import type { TranscriptShareResponse } from './TranscriptSharePrompt.js';
 import { useSurveyState } from './useSurveyState.js';

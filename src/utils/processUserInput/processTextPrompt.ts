@@ -9,8 +9,7 @@ import type {
 import { logEvent } from '../../services/analytics/index.js'
 import type { PermissionMode } from '../../types/permissions.js'
 import { createUserMessage } from '../messages.js'
-import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js'
-import { startInteractionSpan } from '../telemetry/sessionTracing.js'
+import { logOTelEvent, redactIfDisabled, startInteractionSpan } from '../telemetry.js'
 import {
   matchesKeepGoingKeyword,
   matchesNegativeKeyword,
