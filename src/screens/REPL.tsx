@@ -287,6 +287,8 @@ import { useMessageActions, MessageActionsKeybindings, MessageActionsBar, type M
 import { setClipboard } from '../ink/termio/osc.js';
 import type { ScrollBoxHandle } from '../ink/components/ScrollBox.js';
 import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
+import { sessionBridge } from '../utils/sessionBridge.js';
+import { setMessagesGetter } from '../messages.js';
 
 // Stable empty array for hooks that accept MCPServerConnection[] — avoids
 // creating a new [] literal on every render in remote mode, which would
@@ -3827,6 +3829,53 @@ export function REPL({
   // the case where user resumes a conversation then quites before doing
   // anything else
   useLogMessages(messages, messages.length === initialMessages?.length);
+
+  // Remote control: expose messages getter and notify HTTP SSE clients
+  useEffect(() => {
+    setMessagesGetter(() => messages);
+    sessionBridge.notifyMessagesChanged();
+  }, [messages]);
+
+  // Remote control: track real REPL loading state for accurate isBusy()
+  useEffect(() => {
+    sessionBridge.setLoading(isLoading);
+  }, [isLoading]);
+
+  // Register session bridge so HTTP server can submit prompts to this REPL session
+  useEffect(() => {
+    sessionBridge.register((prompt, image) => {
+      const contentBlocks: import('@anthropic-ai/sdk/resources/messages.mjs').ContentBlockParam[] = []
+      if (image) {
+        contentBlocks.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: image.mediaType as
+              | 'image/jpeg'
+              | 'image/png'
+              | 'image/gif'
+              | 'image/webp',
+            data: image.base64,
+          },
+        })
+      }
+      contentBlocks.push({ type: 'text', text: prompt })
+      const userMessage = createUserMessage({
+        content: image ? contentBlocks : prompt,
+      })
+      const newAbortController = new AbortController()
+      setAbortController(newAbortController)
+      void onQuery(
+        [userMessage],
+        newAbortController,
+        true,
+        [],
+        mainLoopModel,
+      )
+    })
+    return () => sessionBridge.unregister()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onQuery, mainLoopModel]);
 
   // REPL Bridge: replicate user/assistant messages to the bridge session
   // for remote access via claude.ai. No-op in external builds or when not enabled.
