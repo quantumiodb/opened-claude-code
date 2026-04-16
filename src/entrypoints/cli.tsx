@@ -294,6 +294,14 @@ async function main(): Promise<void> {
     main: cliMain
   } = await import('../main.js');
   profileCheckpoint('cli_after_main_import');
+
+  // Auto-start Telegram bot if env vars are set
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_OWNER_CHAT_ID) {
+    import('../services/telegramBridge.js').then(({ autoStartTelegram }) =>
+      autoStartTelegram()
+    ).catch(() => {})
+  }
+
   await cliMain();
   profileCheckpoint('cli_after_main_complete');
 }
