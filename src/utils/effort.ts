@@ -308,13 +308,13 @@ export function getDefaultEffortForModel(
   // Max/Team also get medium when the tengu_grey_step2 config is enabled.
   if (model.toLowerCase().includes('opus-4-6')) {
     if (isProSubscriber()) {
-      return 'medium'
+      return 'high'
     }
     if (
       getOpusDefaultEffortConfig().enabled &&
       (isMaxSubscriber() || isTeamSubscriber())
     ) {
-      return 'medium'
+      return 'high'
     }
   }
 
