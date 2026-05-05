@@ -8,6 +8,13 @@ import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry.js'
 import { resetMicrocompactState } from './microCompact.js'
+import { logError } from '../../utils/log.js'
+
+const compactCleanupCallbacks: Array<() => void> = []
+
+export function registerCompactCleanup(callback: () => void): void {
+  compactCleanupCallbacks.push(callback)
+}
 
 /**
  * Run cleanup of caches and tracking state after compaction.
@@ -74,4 +81,11 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
     )
   }
   clearSessionMessagesCache()
+  for (const cb of compactCleanupCallbacks) {
+    try {
+      cb()
+    } catch (error) {
+      logError(error)
+    }
+  }
 }
