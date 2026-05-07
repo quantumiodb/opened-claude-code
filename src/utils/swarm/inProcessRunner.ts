@@ -92,7 +92,7 @@ import {
   getLastPeerDmSummary,
   isPermissionResponse,
   isShutdownRequest,
-  markMessageAsReadByIndex,
+  markMessageAsReadByIdentity,
   readMailbox,
   writeToMailbox,
 } from '../teammateMailbox.js'
@@ -400,10 +400,10 @@ function createInProcessCanUseTool(
             if (msg && !msg.read) {
               const parsed = isPermissionResponse(msg.text)
               if (parsed && parsed.request_id === request.id) {
-                await markMessageAsReadByIndex(
+                await markMessageAsReadByIdentity(
                   identity.agentName,
                   identity.teamName,
-                  i,
+                  msg,
                 )
                 if (parsed.subtype === 'success') {
                   processMailboxPermissionResponse({
@@ -791,10 +791,10 @@ async function waitForNextPromptOrShutdown(
         logForDebugging(
           `[inProcessRunner] ${identity.agentName} received shutdown request from ${shutdownParsed?.from} (prioritized over ${skippedUnread} unread messages)`,
         )
-        await markMessageAsReadByIndex(
+        await markMessageAsReadByIdentity(
           identity.agentName,
           identity.teamName,
-          shutdownIndex,
+          msg,
         )
         return {
           type: 'shutdown_request',
@@ -829,10 +829,10 @@ async function waitForNextPromptOrShutdown(
           logForDebugging(
             `[inProcessRunner] ${identity.agentName} received new message from ${msg.from} (index ${selectedIndex})`,
           )
-          await markMessageAsReadByIndex(
+          await markMessageAsReadByIdentity(
             identity.agentName,
             identity.teamName,
-            selectedIndex,
+            msg,
           )
           return {
             type: 'new_message',
