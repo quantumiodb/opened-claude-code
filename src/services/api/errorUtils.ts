@@ -242,6 +242,10 @@ export function formatAPIError(error: APIError): string {
     return 'Unable to connect to API. Check your internet connection'
   }
 
+  if (error.status === 402) {
+    return 'DeepSeek 账户余额不足，请在 platform.deepseek.com 充值后重试'
+  }
+
   // Guard: when deserialized from JSONL (e.g. --resume), the error object may
   // be a plain object without a `.message` property.  Return a safe fallback
   // instead of undefined, which would crash callers that access `.length`.
