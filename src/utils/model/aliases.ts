@@ -6,6 +6,9 @@ export const MODEL_ALIASES = [
   'sonnet[1m]',
   'opus[1m]',
   'opusplan',
+  // DeepSeek convenience aliases (resolved by ANTHROPIC_DEFAULT_*_MODEL envs)
+  'pro',
+  'flash',
 ] as const
 export type ModelAlias = (typeof MODEL_ALIASES)[number]
 
