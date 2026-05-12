@@ -86,7 +86,34 @@ export const COST_HAIKU_45 = {
   webSearchRequests: 0.01,
 } as const satisfies ModelCosts
 
-const DEFAULT_UNKNOWN_MODEL_COST = COST_TIER_5_25
+// DeepSeek V4 Pro pricing (CNY per Mtok), discounted price until 2026-05-31.
+// Set DEEPSEEK_USE_FULL_PRICE=1 for standard price.
+export const COST_DEEPSEEK_PRO_DISCOUNTED = {
+  inputTokens: 3,
+  outputTokens: 6,
+  promptCacheWriteTokens: 3,
+  promptCacheReadTokens: 0.025,
+  webSearchRequests: 0,
+} as const satisfies ModelCosts
+
+export const COST_DEEPSEEK_PRO_FULL = {
+  inputTokens: 12,
+  outputTokens: 24,
+  promptCacheWriteTokens: 12,
+  promptCacheReadTokens: 0.1,
+  webSearchRequests: 0,
+} as const satisfies ModelCosts
+
+// DeepSeek V4 Flash pricing (CNY per Mtok).
+export const COST_DEEPSEEK_FLASH = {
+  inputTokens: 1,
+  outputTokens: 2,
+  promptCacheWriteTokens: 1,
+  promptCacheReadTokens: 0.02,
+  webSearchRequests: 0,
+} as const satisfies ModelCosts
+
+const DEFAULT_UNKNOWN_MODEL_COST = COST_DEEPSEEK_FLASH
 
 /**
  * Get the cost tier for Opus 4.6 based on fast mode.
@@ -98,10 +125,17 @@ export function getOpus46CostTier(fastMode: boolean): ModelCosts {
   return COST_TIER_5_25
 }
 
+export function getDeepSeekProCostTier(): ModelCosts {
+  if (process.env.DEEPSEEK_USE_FULL_PRICE === '1') {
+    return COST_DEEPSEEK_PRO_FULL
+  }
+  return COST_DEEPSEEK_PRO_DISCOUNTED
+}
+
 // @[MODEL LAUNCH]: Add a pricing entry for the new model below.
 // Costs from https://platform.claude.com/docs/en/about-claude/pricing
 // Web search cost: $10 per 1000 requests = $0.01 per request
-export const MODEL_COSTS: Record<ModelShortName, ModelCosts> = {
+export const MODEL_COSTS: Record<string, ModelCosts> = {
   [firstPartyNameToCanonical(CLAUDE_3_5_HAIKU_CONFIG.firstParty)]:
     COST_HAIKU_35,
   [firstPartyNameToCanonical(CLAUDE_HAIKU_4_5_CONFIG.firstParty)]:
@@ -123,6 +157,8 @@ export const MODEL_COSTS: Record<ModelShortName, ModelCosts> = {
     COST_TIER_5_25,
   [firstPartyNameToCanonical(CLAUDE_OPUS_4_6_CONFIG.firstParty)]:
     COST_TIER_5_25,
+  'deepseek-v4-pro': COST_DEEPSEEK_PRO_DISCOUNTED,
+  'deepseek-v4-flash': COST_DEEPSEEK_FLASH,
 }
 
 /**
@@ -150,6 +186,11 @@ export function getModelCosts(model: string, usage: Usage): ModelCosts {
   ) {
     const isFastMode = usage.speed === 'fast'
     return getOpus46CostTier(isFastMode)
+  }
+
+  // DeepSeek V4 Pro pricing depends on discount-period flag.
+  if (shortName === 'deepseek-v4-pro') {
+    return getDeepSeekProCostTier()
   }
 
   const costs = MODEL_COSTS[shortName]
@@ -202,12 +243,13 @@ export function calculateCostFromTokens(
 }
 
 function formatPrice(price: number): string {
-  // Format price: integers without decimals, others with 2 decimal places
-  // e.g., 3 -> "$3", 0.8 -> "$0.80", 22.5 -> "$22.50"
+  // Format price: integers without decimals, fractions with 2 decimal places
+  // (3 decimals for very small values like cache-read tokens).
+  // e.g., 3 -> "¥3", 0.8 -> "¥0.80", 0.025 -> "¥0.025"
   if (Number.isInteger(price)) {
-    return `$${price}`
+    return `¥${price}`
   }
-  return `$${price.toFixed(2)}`
+  return `¥${price.toFixed(price < 0.1 ? 3 : 2)}`
 }
 
 /**

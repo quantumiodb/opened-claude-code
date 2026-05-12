@@ -44,8 +44,11 @@ import {
 import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
-import { getCanonicalName } from './utils/model/model.js'
-import { calculateUSDCost } from './utils/modelCost.js'
+import {
+  getCanonicalName,
+  getDefaultMainLoopModelSetting,
+} from './utils/model/model.js'
+import { calculateUSDCost, getModelCosts } from './utils/modelCost.js'
 export {
   getTotalCostUSD as getTotalCost,
   getTotalDuration,
@@ -175,7 +178,7 @@ export function saveCurrentSessionCosts(fpsMetrics?: FpsMetrics): void {
 }
 
 function formatCost(cost: number, maxDecimalPlaces: number = 4): string {
-  return `$${cost > 0.5 ? round(cost, 100).toFixed(2) : cost.toFixed(maxDecimalPlaces)}`
+  return `¥${cost > 0.5 ? round(cost, 100).toFixed(2) : cost.toFixed(maxDecimalPlaces)}`
 }
 
 function formatModelUsage(): string {
@@ -234,12 +237,35 @@ export function formatTotalCost(): string {
 
   const modelUsageDisplay = formatModelUsage()
 
+  // DeepSeek-specific: show prompt cache hit rate and yuan savings, since the
+  // /anthropic endpoint exposes cache_read / cache_creation token counts and
+  // these are the headline cost driver (cache reads are ~120x cheaper).
+  let cacheStatsDisplay = ''
+  const cacheRead = getTotalCacheReadInputTokens()
+  const cacheCreation = getTotalCacheCreationInputTokens()
+  const directInput = getTotalInputTokens()
+  const totalInput = cacheRead + cacheCreation + directInput
+  if (totalInput > 0) {
+    const hitRate = (cacheRead / totalInput) * 100
+    const model = getDefaultMainLoopModelSetting()
+    const costs = getModelCosts(model, {
+      input_tokens: 0,
+      output_tokens: 0,
+    } as Usage)
+    const savings =
+      (cacheRead / 1_000_000) *
+      (costs.inputTokens - costs.promptCacheReadTokens)
+    cacheStatsDisplay =
+      `\nCache hit rate:         ${hitRate.toFixed(1)}% (${formatNumber(cacheRead)} / ${formatNumber(totalInput)} input tokens)` +
+      `\nCache savings:         ${formatCost(savings)}`
+  }
+
   return chalk.dim(
     `Total cost:            ${costDisplay}\n` +
       `Total duration (API):  ${formatDuration(getTotalAPIDuration())}
 Total duration (wall): ${formatDuration(getTotalDuration())}
 Total code changes:    ${getTotalLinesAdded()} ${getTotalLinesAdded() === 1 ? 'line' : 'lines'} added, ${getTotalLinesRemoved()} ${getTotalLinesRemoved() === 1 ? 'line' : 'lines'} removed
-${modelUsageDisplay}`,
+${modelUsageDisplay}${cacheStatsDisplay}`,
   )
 }
 
