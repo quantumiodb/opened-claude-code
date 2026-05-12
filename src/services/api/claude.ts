@@ -1387,6 +1387,14 @@ async function* queryModel(
   }
   const allTools = [...toolSchemas, ...extraToolSchemas]
 
+  // Sort tools alphabetically by name for stable ordering to maximize
+  // DeepSeek's server-side prefix cache hits across requests.
+  allTools.sort((a, b) => {
+    const nameA = 'name' in a ? a.name : ''
+    const nameB = 'name' in b ? b.name : ''
+    return nameA.localeCompare(nameB)
+  })
+
   const isFastMode =
     isFastModeEnabled() &&
     isFastModeAvailable() &&
