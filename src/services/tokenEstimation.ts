@@ -121,26 +121,21 @@ function stripToolSearchFieldsFromMessages(
   })
 }
 
+// DeepSeek has no /count_tokens endpoint. Returning null forces callers to
+// use rough estimation (roughTokenCountEstimation), which uses UTF-8 byte
+// length for accuracy on CJK-heavy content.
 export async function countTokensWithAPI(
-  content: string,
+  _content: string,
 ): Promise<number | null> {
-  // Special case for empty content - API doesn't accept empty messages
-  if (!content) {
-    return 0
-  }
-
-  const message: Anthropic.Beta.Messages.BetaMessageParam = {
-    role: 'user',
-    content: content,
-  }
-
-  return countMessagesTokensWithAPI([message], [])
+  return null
 }
 
 export async function countMessagesTokensWithAPI(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
+  // DeepSeek has no /count_tokens endpoint; fall back to rough estimation.
+  return null
   return withTokenCountVCR(messages, tools, async () => {
     try {
       const model = getMainLoopModel()
@@ -204,7 +199,10 @@ export function roughTokenCountEstimation(
   content: string,
   bytesPerToken: number = 4,
 ): number {
-  return Math.round(content.length / bytesPerToken)
+  // DeepSeek tokenizer is byte-pair on UTF-8 bytes, so CJK characters consume
+  // 3 bytes/char rather than 1. content.length under-estimates by ~3x on
+  // Chinese content. Buffer.byteLength matches DeepSeek's actual tokenization.
+  return Math.round(Buffer.byteLength(content, 'utf8') / bytesPerToken)
 }
 
 /**
@@ -252,6 +250,9 @@ export async function countTokensViaHaikuFallback(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
+  // DeepSeek: no count_tokens endpoint, no Haiku fallback model — return null
+  // so callers use roughTokenCountEstimation.
+  return null
   // Check if messages contain thinking blocks
   const containsThinking = hasThinkingBlocks(messages)
 
