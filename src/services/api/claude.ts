@@ -936,6 +936,77 @@ function isToolResult(
 }
 
 /**
+ * DeepSeek silently ignores the `is_error: true` flag on tool_result blocks,
+ * so the model has no way to know a tool call failed. Prefix the content with
+ * a literal "[ERROR]" text block so the model can detect failures from text.
+ *
+ * Walks nested tool_result content recursively (for cached histories).
+ */
+function prefixDeepSeekErrorToolResults(
+  blocks: BetaContentBlockParam[],
+): BetaContentBlockParam[] {
+  let changed = false
+  const updated = blocks.map(block => {
+    if (!isToolResult(block)) return block
+
+    let nextBlock = block
+    let blockChanged = false
+
+    if ((block as { is_error?: boolean }).is_error) {
+      const content = Array.isArray(block.content)
+        ? block.content
+        : [{ type: 'text', text: String(block.content ?? '') }]
+      const prefixed = [
+        { type: 'text', text: '[ERROR] Tool execution failed:' },
+        ...content,
+      ] as BetaContentBlockParam[]
+      nextBlock = { ...block, content: prefixed } as typeof block
+      blockChanged = true
+    }
+
+    if (Array.isArray(nextBlock.content)) {
+      const nested = prefixDeepSeekErrorToolResults(
+        nextBlock.content as BetaContentBlockParam[],
+      )
+      if (nested !== nextBlock.content) {
+        nextBlock = { ...nextBlock, content: nested } as typeof block
+        blockChanged = true
+      }
+    }
+
+    if (blockChanged) {
+      changed = true
+      return nextBlock
+    }
+    return block
+  })
+
+  return changed ? updated : blocks
+}
+
+function applyDeepSeekErrorPrefix(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  let changed = false
+  const updated = messages.map(msg => {
+    const content = msg.message.content
+    if (!Array.isArray(content)) return msg
+
+    const updatedContent = prefixDeepSeekErrorToolResults(
+      content as BetaContentBlockParam[],
+    )
+    if (updatedContent === content) return msg
+
+    changed = true
+    return {
+      ...msg,
+      message: { ...msg.message, content: updatedContent },
+    } as typeof msg
+  })
+  return changed ? updated : messages
+}
+
+/**
  * Ensures messages contain at most `limit` media items (images + documents).
  * Strips oldest media first to preserve the most recent.
  */
@@ -1299,6 +1370,10 @@ async function* queryModel(
     messagesForAPI,
     API_MAX_MEDIA_PER_REQUEST,
   )
+
+  // DeepSeek ignores is_error on tool_result blocks; prefix failed results
+  // with literal "[ERROR]" text so the model can detect them.
+  messagesForAPI = applyDeepSeekErrorPrefix(messagesForAPI)
 
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
