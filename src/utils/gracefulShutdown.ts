@@ -14,6 +14,7 @@ import instances from '../ink/instances.js'
 import {
   DISABLE_KITTY_KEYBOARD,
   DISABLE_MODIFY_OTHER_KEYS,
+  eraseToEndOfScreen,
 } from '../ink/termio/csi.js'
 import {
   DBP,
@@ -104,6 +105,11 @@ function cleanupTerminalModes(): void {
     // saved cursor position. Safe to skip full unmount: this function already
     // sends all the terminal-reset sequences, and the process is exiting.
     inst?.detachForShutdown()
+    // Clear any residual text left below the cursor (e.g., autocomplete
+    // suggestion dropdown that was visible when the user typed /exit).
+    // After alt-screen exit the main buffer is restored, but Ink's final
+    // render may have flushed extra lines; erase from cursor downward.
+    writeSync(1, eraseToEndOfScreen())
     // Disable extended key reporting — always send both since terminals
     // silently ignore whichever they don't implement
     writeSync(1, DISABLE_MODIFY_OTHER_KEYS)
