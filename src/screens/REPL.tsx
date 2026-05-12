@@ -2207,7 +2207,9 @@ export function REPL({
   };
   useEffect(() => {
     const totalCost = getTotalCost();
-    if (totalCost >= 5 /* $5 */ && !showCostDialog && !haveShownCostDialog) {
+    // DeepSeek: pricing is in CNY; raise the threshold to roughly match the
+    // user-perceived "5 USD" notification level (1 USD ≈ 7 CNY, rounded up).
+    if (totalCost >= 35 && !showCostDialog && !haveShownCostDialog) {
       logEvent('tengu_cost_threshold_reached', {});
       // Mark as shown even if the dialog won't render (no console billing
       // access). Otherwise this effect re-fires on every message change for

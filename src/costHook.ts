@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { formatTotalCost, saveCurrentSessionCosts } from './cost-tracker.js'
-import { hasConsoleBillingAccess } from './utils/billing.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 
 export function useCostSummary(
@@ -8,10 +7,8 @@ export function useCostSummary(
 ): void {
   useEffect(() => {
     const f = () => {
-      if (hasConsoleBillingAccess()) {
-        process.stdout.write('\n' + formatTotalCost() + '\n')
-      }
-
+      // DeepSeek: there's no Anthropic console billing tier; always print.
+      process.stdout.write('\n' + formatTotalCost() + '\n')
       saveCurrentSessionCosts(getFpsMetrics?.())
     }
     process.on('exit', f)
