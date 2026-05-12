@@ -508,7 +508,13 @@ export function getAPIMetadata() {
       device_id: getOrCreateUserID(),
       // Only include OAuth account UUID when actively using OAuth authentication
       account_uuid: getOauthAccountInfo()?.accountUuid ?? '',
-      session_id: getSessionId(),
+      // DeepSeek's prompt cache keys on the full request body bytes. The
+      // real session_id changes every launch and would force a fresh cache
+      // entry per session — defeating the cache entirely. Pin to a stable
+      // sentinel so identical conversations across sessions share a cache
+      // entry. Real telemetry/analytics still get the live id via
+      // getSessionId() at the call sites that need it.
+      session_id: 'claude-code-ds',
     }),
   }
 }
