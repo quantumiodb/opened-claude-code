@@ -18,7 +18,7 @@ export function getAPIProvider(): APIProvider {
         ? 'foundry'
         : isEnvTruthy(process.env.CLAUDE_USE_GLM)
           ? 'glm'
-          : isEnvTruthy(process.env.CLAUDE_USE_DEEPSEEK)
+          : isEnvTruthy(process.env.CLAUDE_CODE_USE_DEEPSEEK)
             ? 'deepseek'
             : 'firstParty'
 }
@@ -41,6 +41,15 @@ export function isGLMProvider(): boolean {
  */
 export function isDeepSeekProvider(): boolean {
   return getAPIProvider() === 'deepseek'
+}
+
+export function isDeepSeekBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+  try {
+    return new URL(baseUrl).host.endsWith('deepseek.com')
+  } catch {
+    return false
+  }
 }
 
 export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
