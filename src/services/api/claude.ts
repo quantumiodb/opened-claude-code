@@ -1596,31 +1596,13 @@ async function* queryModel(
     // without notifying the model launch DRI and research. This is a sensitive
     // setting that can greatly affect model quality and bashing.
     if (hasThinking && modelSupportsThinking(options.model)) {
-      if (
-        !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING) &&
-        modelSupportsAdaptiveThinking(options.model)
-      ) {
-        // For models that support adaptive thinking, always use adaptive
-        // thinking without a budget.
-        thinking = {
-          type: 'adaptive',
-        } satisfies BetaMessageStreamParams['thinking']
-      } else {
-        // For models that do not support adaptive thinking, use the default
-        // thinking budget unless explicitly specified.
-        let thinkingBudget = getMaxThinkingTokensForModel(options.model)
-        if (
-          thinkingConfig.type === 'enabled' &&
-          thinkingConfig.budgetTokens !== undefined
-        ) {
-          thinkingBudget = thinkingConfig.budgetTokens
-        }
-        thinkingBudget = Math.min(maxOutputTokens - 1, thinkingBudget)
-        thinking = {
-          budget_tokens: thinkingBudget,
-          type: 'enabled',
-        } satisfies BetaMessageStreamParams['thinking']
-      }
+      // DeepSeek controls thinking depth via CLAUDE_CODE_EFFORT_LEVEL alone;
+      // budget_tokens is ignored server-side. Send a minimal thinking param
+      // so the SDK knows to expect thinking blocks in the response.
+      thinking = {
+        budget_tokens: maxOutputTokens - 1,
+        type: 'enabled',
+      } satisfies BetaMessageStreamParams['thinking']
     }
 
     // Get API context management strategies if enabled
