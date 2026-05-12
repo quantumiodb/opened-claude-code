@@ -437,7 +437,8 @@ export function getAssistantMessageFromError(
       error.message.toLowerCase().includes('timeout'))
   ) {
     return createAssistantAPIErrorMessage({
-      content: API_TIMEOUT_ERROR_MESSAGE,
+      content:
+        '请求超时。DeepSeek 服务端排队等待超过上限后断开了连接，请稍后重试或降低 effort 等级',
       error: 'unknown',
     })
   }
@@ -1004,6 +1005,11 @@ export function classifyAPIError(error: unknown): string {
   // DeepSeek: insufficient account balance
   if (error instanceof APIError && error.status === 402) {
     return 'insufficient_balance'
+  }
+
+  // DeepSeek: invalid request parameters
+  if (error instanceof APIError && error.status === 422) {
+    return 'invalid_parameters'
   }
 
   // Rate limiting

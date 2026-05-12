@@ -4,7 +4,7 @@ import {
   getAdditionalDirectoriesForClaudeMd,
   setCachedClaudeMdContent,
 } from './bootstrap/state.js'
-import { getLocalISODate } from './constants/common.js'
+import { getSessionStartDate } from './constants/common.js'
 import {
   filterInjectedMemoryFiles,
   getClaudeMds,
@@ -183,7 +183,9 @@ export const getUserContext = memoize(
 
     return {
       ...(claudeMd && { claudeMd }),
-      currentDate: `Today's date is ${getLocalISODate()}.`,
+      // Use session-stable date to preserve DeepSeek's server-side prefix
+      // cache across midnight (was getLocalISODate() — refreshes daily).
+      currentDate: `Today's date is ${getSessionStartDate()}.`,
     }
   },
 )
