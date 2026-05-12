@@ -22,8 +22,9 @@ const ENABLED_FEATURES = [
   'TREE_SITTER_BASH',
   // NATIVE_CLIENT_ATTESTATION intentionally disabled: it injects a 'cch=00000'
   // placeholder into the x-anthropic-billing-header and computes a body hash.
-  // GLM's /anthropic endpoint does not validate this header — sending it
-  // adds CPU + an HTTP header without value. Keep off on glm branch.
+  // GLM/DeepSeek's /anthropic endpoints do not validate this header — sending
+  // it adds CPU + an HTTP header without value. Keep off for non-Anthropic
+  // providers.
   'BRIDGE_MODE',
   'COORDINATOR_MODE',
 ]
