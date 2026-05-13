@@ -21,10 +21,13 @@ export function getPrivacyLevel(): PrivacyLevel {
   if (process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC) {
     return 'essential-traffic'
   }
-  if (process.env.DISABLE_TELEMETRY) {
-    return 'no-telemetry'
-  }
-  return 'default'
+  // DeepSeek branch: there is no first-party Anthropic telemetry pipeline to
+  // talk to, and the analytics module has been replaced with no-op stubs
+  // upstream (commits 058cf17 + c40af24). Default to 'no-telemetry' so the
+  // few remaining call sites that gate on isTelemetryDisabled() (feedback
+  // survey, analytics config) take the disabled path without requiring
+  // users to set DISABLE_TELEMETRY=1.
+  return 'no-telemetry'
 }
 
 /**
