@@ -51,7 +51,12 @@ export function isAutoMemoryEnabled(): boolean {
   if (settings.autoMemoryEnabled !== undefined) {
     return settings.autoMemoryEnabled
   }
-  return true
+  // DeepSeek branch default: off. The auto-memory section injects ~3145
+  // fixed tokens into every system prompt (a 32% surcharge on a minimal
+  // -p call). Users who want it can flip it in /config -> Auto-memory or
+  // set autoMemoryEnabled: true in settings.json (or unset
+  // CLAUDE_CODE_DISABLE_AUTO_MEMORY=0).
+  return false
 }
 
 /**

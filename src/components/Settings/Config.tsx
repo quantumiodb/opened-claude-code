@@ -282,6 +282,26 @@ export function Config({
       });
     }
   }, {
+    id: 'autoMemoryEnabled',
+    label: 'Auto-memory',
+    // settings.json default is "undefined" which the resolver in
+    // src/memdir/paths.ts treats as "disabled" on this branch. Mirror
+    // that so the toggle reflects what the runtime actually does.
+    value: settingsData?.autoMemoryEnabled ?? false,
+    type: 'boolean' as const,
+    onChange(autoMemoryEnabled: boolean) {
+      updateSettingsForSource('localSettings', {
+        autoMemoryEnabled
+      });
+      setSettingsData(prev_auto_mem => ({
+        ...prev_auto_mem,
+        autoMemoryEnabled
+      }));
+      logEvent('tengu_auto_memory_setting_changed', {
+        enabled: autoMemoryEnabled
+      });
+    }
+  }, {
     id: 'spinnerTipsEnabled',
     label: 'Show tips',
     value: settingsData?.spinnerTipsEnabled ?? true,
