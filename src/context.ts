@@ -17,7 +17,7 @@ import { getBranch, getDefaultBranch, getIsGit, gitExe } from './utils/git.js'
 import { shouldIncludeGitInstructions } from './utils/gitSettings.js'
 import { logError } from './utils/log.js'
 
-const MAX_STATUS_CHARS = 2000
+const MAX_STATUS_CHARS = 1000
 
 // System prompt injection for cache breaking (ant-only, ephemeral debugging state)
 let systemPromptInjection: string | null = null
@@ -85,7 +85,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
     const truncatedStatus =
       status.length > MAX_STATUS_CHARS
         ? status.substring(0, MAX_STATUS_CHARS) +
-          '\n... (truncated because it exceeds 2k characters. If you need more information, run "git status" using BashTool)'
+          '\n... (truncated because it exceeds 1k characters. If you need more information, run "git status" using BashTool)'
         : status
 
     logForDiagnosticsNoPII('info', 'git_status_completed', {
