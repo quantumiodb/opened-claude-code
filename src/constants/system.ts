@@ -3,7 +3,7 @@
 import { feature } from 'bun:bundle'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import { logForDebugging } from '../utils/debug.js'
-import { isEnvDefinedFalsy } from '../utils/envUtils.js'
+import { isEnvTruthy } from '../utils/envUtils.js'
 import { getAPIProvider } from '../utils/model/providers.js'
 import { getWorkload } from '../utils/workloadContext.js'
 
@@ -47,13 +47,10 @@ export function getCLISyspromptPrefix(options?: {
 
 /**
  * Check if attribution header is enabled.
- * Enabled by default, can be disabled via env var or GrowthBook killswitch.
+ * Disabled by default, can be enabled via env var.
  */
 function isAttributionHeaderEnabled(): boolean {
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_ATTRIBUTION_HEADER)) {
-    return false
-  }
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_attribution_header', true)
+  return isEnvTruthy(process.env.CLAUDE_CODE_ATTRIBUTION_HEADER)
 }
 
 /**
