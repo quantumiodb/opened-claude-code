@@ -1310,7 +1310,12 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
  */
 export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
-const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = 'disabled'
+// deepseek branch: telemetry/GrowthBook is stubbed out, so tengu_auto_mode_config
+// never resolves and falls back to this default. Upstream defaulted to 'disabled'
+// to wait for the GB rollout signal — on this branch there is no rollout signal,
+// so default to 'enabled' to let CLI/--permission-mode auto and settings
+// defaultMode=auto work without a remote gate.
+const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = 'enabled'
 
 /**
  * Default auto-mode availability when GrowthBook gives no explicit value.

@@ -193,7 +193,7 @@ export function modelSupportsAutoMode(model: string): boolean {
     // glm-5 and above (glm-5, glm-5.2, glm-6, …).
     if (/glm-[5-9]/.test(m)) return true
     // External allowlist (firstParty already checked above).
-    return /^claude-(opus|sonnet)-4-6/.test(m)
+    return /^claude-(opus|sonnet)-4/.test(m) || /^deepseek-/.test(m)
   }
   return false
 }
