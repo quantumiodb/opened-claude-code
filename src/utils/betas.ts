@@ -189,7 +189,7 @@ export function modelSupportsAutoMode(model: string): boolean {
       return true
     }
     // External allowlist (firstParty already checked above).
-    return /^claude-(opus|sonnet)-4-6/.test(m)
+    return /^claude-(opus|sonnet)-4/.test(m) || /^deepseek-/.test(m)
   }
   return false
 }

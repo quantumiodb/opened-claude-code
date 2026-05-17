@@ -259,8 +259,11 @@ const yoloClassifierResponseSchema = lazySchema(() =>
 
 export const YOLO_CLASSIFIER_TOOL_NAME = 'classify_result'
 
+// Note: omitting `type: 'custom'` — Anthropic accepts it, but DeepSeek's
+// /anthropic endpoint rejects unknown tool types with 400. Other tools in
+// this codebase already omit the type field; we do the same here to keep
+// the classifier compatible with both providers.
 const YOLO_CLASSIFIER_TOOL_SCHEMA: BetaToolUnion = {
-  type: 'custom',
   name: YOLO_CLASSIFIER_TOOL_NAME,
   description: 'Report the security classification result for the agent action',
   input_schema: {
