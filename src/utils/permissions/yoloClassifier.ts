@@ -1328,14 +1328,12 @@ type AutoModeConfig = {
 
 /**
  * Get the model for the classifier.
- * Ant-only env var takes precedence, then GrowthBook JSON config override,
- * then the main loop model.
+ * CLAUDE_CODE_AUTO_MODE_MODEL env takes precedence, then GrowthBook JSON
+ * config override, then the main loop model.
  */
 function getClassifierModel(): string {
-  if (process.env.USER_TYPE === 'ant') {
-    const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
-    if (envModel) return envModel
-  }
+  const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
+  if (envModel) return envModel
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
