@@ -27,6 +27,10 @@ type RipgrepConfig = {
   command: string
   args: string[]
   argv0?: string
+  // Human-readable explanation when ripgrep resolution took a fallback path
+  // (e.g. the bundled binary was missing and we fell back to system rg).
+  // Surfaced in the doctor screen and as a one-time startup warning.
+  note?: string
 }
 
 const getRipgrepConfig = memoize((): RipgrepConfig => {
@@ -70,13 +74,41 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     path.resolve(__dirname, '..', 'vendor', 'ripgrep'),
     path.resolve(__dirname, '..', '..', 'vendor', 'ripgrep'),
   ]
-  const rgRoot =
-    candidateRoots.find(root =>
-      existsSync(path.resolve(root, platformDir, executable)),
-    ) ?? candidateRoots[0]
-  const command = path.resolve(rgRoot, platformDir, executable)
+  const rgRoot = candidateRoots.find(root =>
+    existsSync(path.resolve(root, platformDir, executable)),
+  )
 
-  return { mode: 'builtin', command, args: [] }
+  // Bundled binary found on disk: use it.
+  if (rgRoot) {
+    const command = path.resolve(rgRoot, platformDir, executable)
+    return { mode: 'builtin', command, args: [] }
+  }
+
+  // No bundled binary for this platform (e.g. Android/Termux, or an
+  // incomplete install). Fall back to system rg on PATH so file discovery,
+  // suggestions, and hooks keep working instead of spawning a non-existent
+  // path and failing with ENOENT.
+  const { cmd: systemPath } = findExecutable('rg', [])
+  if (systemPath !== 'rg') {
+    // SECURITY: spawn the bare name 'rg', not the resolved path, to prevent
+    // PATH hijacking via a malicious ./rg in the cwd (see system branch above).
+    return {
+      mode: 'system',
+      command: 'rg',
+      args: [],
+      note: 'bundled ripgrep binary not found; using system rg from PATH',
+    }
+  }
+
+  // Nothing available. Preserve historical behavior: return the expected
+  // builtin path so callers surface a clear ENOENT, with a note explaining why.
+  const command = path.resolve(candidateRoots[0], platformDir, executable)
+  return {
+    mode: 'builtin',
+    command,
+    args: [],
+    note: 'bundled ripgrep binary not found and no system rg on PATH',
+  }
 })
 
 export function ripgrepCommand(): {
@@ -551,12 +583,14 @@ export function getRipgrepStatus(): {
   mode: 'system' | 'builtin' | 'embedded'
   path: string
   working: boolean | null // null if not yet tested
+  note?: string
 } {
   const config = getRipgrepConfig()
   return {
     mode: config.mode,
     path: config.command,
     working: ripgrepStatus?.working ?? null,
+    note: config.note,
   }
 }
 
