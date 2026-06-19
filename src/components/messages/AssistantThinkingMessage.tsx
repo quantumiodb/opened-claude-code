@@ -4,6 +4,7 @@ import React from 'react';
 import { Box, Text } from '../../ink.js';
 import { CtrlOToExpand } from '../CtrlOToExpand.js';
 import { Markdown } from '../Markdown.js';
+import { useSettings } from '../../hooks/useSettings.js';
 type Props = {
   // Accept either full ThinkingBlock/ThinkingBlockParam or a minimal shape with just type and thinking
   param: ThinkingBlock | ThinkingBlockParam | {
@@ -36,7 +37,8 @@ export function AssistantThinkingMessage(t0) {
   if (hideInTranscript) {
     return null;
   }
-  const shouldShowFullThinking = isTranscriptMode || verbose;
+  const settings = useSettings();
+  const shouldShowFullThinking = isTranscriptMode || verbose || settings.alwaysThinkingEnabled !== false;
   if (!shouldShowFullThinking) {
     const t4 = addMargin ? 1 : 0;
     let t5;

@@ -538,9 +538,6 @@ function AssistantMessageBlock(t0) {
       }
     case "thinking":
       {
-        if (!isTranscriptMode && !verbose) {
-          return null;
-        }
         const isLastThinking = !lastThinkingBlockId || thinkingBlockId === lastThinkingBlockId;
         const t1 = isTranscriptMode && !isLastThinking;
         let t2;
