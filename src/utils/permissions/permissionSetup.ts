@@ -1312,11 +1312,25 @@ export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
 const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = 'disabled'
 
+/**
+ * Default auto-mode availability when GrowthBook gives no explicit value.
+ * The Anthropic kill-switch (tengu_auto_mode_config) is never served on the
+ * GLM endpoint, so the stock 'disabled' default would permanently lock auto
+ * mode out for GLM users. Force-enable it for GLM (model gate still applies
+ * via modelSupportsAutoMode), while keeping 'disabled' for everyone else so
+ * the circuit breaker stays the safe default on real Anthropic models.
+ */
+function autoModeEnabledDefault(): AutoModeEnabledState {
+  // glm-5 and above (glm-5, glm-5.2, glm-6, …).
+  if (/glm-[5-9]/.test(getMainLoopModel().toLowerCase())) return 'enabled'
+  return AUTO_MODE_ENABLED_DEFAULT
+}
+
 function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
   if (value === 'enabled' || value === 'disabled' || value === 'opt-in') {
     return value
   }
-  return AUTO_MODE_ENABLED_DEFAULT
+  return autoModeEnabledDefault()
 }
 
 /**
