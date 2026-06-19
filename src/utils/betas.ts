@@ -188,6 +188,10 @@ export function modelSupportsAutoMode(model: string): boolean {
       if (/claude-(opus|sonnet|haiku)-4(?!-[6-9])/.test(m)) return false
       return true
     }
+    // GLM models (served over an Anthropic-compatible firstParty endpoint)
+    // support auto mode — the classifier runs against the same transcript.
+    // glm-5 and above (glm-5, glm-5.2, glm-6, …).
+    if (/glm-[5-9]/.test(m)) return true
     // External allowlist (firstParty already checked above).
     return /^claude-(opus|sonnet)-4-6/.test(m)
   }
