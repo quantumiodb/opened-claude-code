@@ -23,6 +23,7 @@ import { randomUUID } from 'crypto'
 import {
   getAPIProvider,
   isDeepSeekProvider,
+  isGLMProvider,
   isFirstPartyAnthropicBaseUrl,
 } from 'src/utils/model/providers.js'
 import {
@@ -509,13 +510,16 @@ export function getAPIMetadata() {
       device_id: getOrCreateUserID(),
       // Only include OAuth account UUID when actively using OAuth authentication
       account_uuid: getOauthAccountInfo()?.accountUuid ?? '',
-      // DeepSeek's prompt cache keys on the full request body bytes. The
+      // GLM/DeepSeek prompt caches key on the full request body bytes. The
       // real session_id changes every launch and would force a fresh cache
       // entry per session — defeating the cache entirely. Pin to a stable
-      // sentinel so identical conversations across sessions share a cache
-      // entry. Real telemetry/analytics still get the live id via
-      // getSessionId() at the call sites that need it.
-      session_id: 'claude-code-ds',
+      // sentinel for non-Anthropic providers so identical conversations across
+      // sessions share a cache entry. Real Anthropic telemetry keeps the live
+      // session id.
+      session_id:
+        isDeepSeekProvider() || isGLMProvider()
+          ? 'claude-code-ds'
+          : getSessionId(),
     }),
   }
 }

@@ -29,7 +29,7 @@ const KNOWN_DEEPSEEK_MODELS = new Set(['deepseek-v4-pro', 'deepseek-v4-flash'])
  */
 export async function validateModel(
   model: string,
-): Promise<{ valid: boolean; error?: string; warning?: string }> {
+): Promise<{ valid: boolean; error?: string }> {
   const normalizedModel = model.trim()
 
   // Empty model is invalid
