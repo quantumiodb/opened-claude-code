@@ -63,12 +63,8 @@ walkDir(SRC_DIR, (filePath) => {
 
 const isBinary = process.argv.includes('--binary')
 
-// Name the binary after the current git branch, e.g. dist/claude-glm
-const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim() || 'main'
-const binaryName = `claude-${branch}`
-
 console.log(`Enabled features: ${ENABLED_FEATURES.join(', ')} (patched ${modified.length} files)`)
-console.log(`Build mode: ${isBinary ? `binary (standalone executable → dist/${binaryName})` : 'bundle (JS)'}`)
+console.log(`Build mode: ${isBinary ? 'binary (standalone executable)' : 'bundle (JS)'}`)
 
 const MACRO_DEFINES =
   `--define 'MACRO.VERSION="2.1.87"' ` +
@@ -85,7 +81,7 @@ const MACRO_DEFINES =
 try {
   if (isBinary) {
     execSync(
-      `bun build src/entrypoints/cli.tsx --compile --outfile=dist/${binaryName} ` + MACRO_DEFINES,
+      `bun build src/entrypoints/cli.tsx --compile --outfile=dist/claude ` + MACRO_DEFINES,
       { stdio: 'inherit', cwd: join(import.meta.dir, '..') },
     )
   } else {
