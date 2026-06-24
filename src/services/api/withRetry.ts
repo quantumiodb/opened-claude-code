@@ -11,7 +11,10 @@ import { isAwsCredentialsProviderError } from 'src/utils/aws.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
 import { createSystemAPIErrorMessage } from 'src/utils/messages.js'
-import { getAPIProviderForStatsig } from 'src/utils/model/providers.js'
+import {
+  getAPIProviderForStatsig,
+  isDeepSeekProvider,
+} from 'src/utils/model/providers.js'
 import {
   clearApiKeyHelperCache,
   clearAwsCredentialsCache,
@@ -768,9 +771,11 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // DeepSeek: always retry 429 with exponential backoff (no subscriber gates).
+  // Retry on rate limits. DeepSeek has no subscriber tiers, so always retry
+  // 429 with exponential backoff. Anthropic retains the subscriber gate so
+  // ClaudeAI subscription users don't churn through rate limits.
   if (error.status === 429) {
-    return true
+    return isDeepSeekProvider() || !isClaudeAISubscriber() || isEnterpriseSubscriber()
   }
 
   // Clear API key cache on 401 and allow retry.
