@@ -15,7 +15,6 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
-import { computeFingerprint } from './fingerprint.js'
 import { normalizeModelStringForAPI } from './model/model.js'
 
 type MessageParam = Anthropic.MessageParam
@@ -61,21 +60,6 @@ export type SideQueryOptions = {
   stop_sequences?: string[]
   /** Attributes this call in tengu_api_success for COGS joining against reporting.sampling_calls. */
   querySource: QuerySource
-}
-
-/**
- * Extract text from first user message for fingerprint computation.
- */
-function extractFirstUserMessageText(messages: MessageParam[]): string {
-  const firstUserMessage = messages.find(m => m.role === 'user')
-  if (!firstUserMessage) return ''
-
-  const content = firstUserMessage.content
-  if (typeof content === 'string') return content
-
-  // Array of content blocks - find first text block
-  const textBlock = content.find(block => block.type === 'text')
-  return textBlock?.type === 'text' ? textBlock.text : ''
 }
 
 /**
@@ -136,12 +120,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     betas.push(STRUCTURED_OUTPUTS_BETA_HEADER)
   }
 
-  // Extract first user message text for fingerprint
-  const messageText = extractFirstUserMessageText(messages)
-
-  // Compute fingerprint for OAuth attribution
-  const fingerprint = computeFingerprint(messageText, MACRO.VERSION)
-  const attributionHeader = getAttributionHeader(fingerprint)
+  const attributionHeader = getAttributionHeader()
 
   // Build system as array to keep attribution header in its own block
   // (prevents server-side parsing from including system content in cc_entrypoint)
