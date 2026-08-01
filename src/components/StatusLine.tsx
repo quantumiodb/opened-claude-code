@@ -26,6 +26,8 @@ import { getRuntimeMainLoopModel, type ModelName, renderModelName } from '../uti
 import { getCurrentSessionTitle } from '../utils/sessionStorage.js';
 import { doesMostRecentAssistantMessageExceed200k, getCurrentUsage } from '../utils/tokens.js';
 import { getCurrentWorktreeSession } from '../utils/worktree.js';
+import { getDisplayedEffortLevel, modelSupportsEffort } from '../utils/effort.js';
+import type { EffortValue } from '../utils/effort.js';
 import { isVimModeEnabled } from './PromptInput/utils.js';
 export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   // Assistant mode: statusline fields (model, permission mode, cwd) reflect the
@@ -33,7 +35,7 @@ export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   if (feature('KAIROS') && getKairosActive()) return false;
   return settings?.statusLine !== undefined;
 }
-function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode): StatusLineCommandInput {
+function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode, effortValue?: EffortValue): StatusLineCommandInput {
   const agentType = getMainThreadAgentType();
   const worktreeSession = getCurrentWorktreeSession();
   const runtimeModel = getRuntimeMainLoopModel({
@@ -45,6 +47,16 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
   const currentUsage = getCurrentUsage(messages);
   const contextWindowSize = getContextWindowForModel(runtimeModel, getSdkBetas());
   const contextPercentages = calculateContextPercentages(currentUsage, contextWindowSize);
+
+  // Resolve effort level for the current model — only included when the model
+  // supports the effort parameter (consistent with official Claude Code).
+  let effort: { level: string } | undefined;
+  if (modelSupportsEffort(runtimeModel)) {
+    effort = {
+      level: getDisplayedEffortLevel(runtimeModel, effortValue),
+    };
+  }
+
   const sessionId = getSessionId();
   const sessionName = getCurrentSessionTitle(sessionId);
   const rawUtil = getRawUtilization();
@@ -96,6 +108,7 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
       remaining_percentage: contextPercentages.remaining
     },
     exceeds_200k_tokens: exceeds200kTokens,
+    ...(effort && { effort }),
     ...((rateLimits.five_hour || rateLimits.seven_day) && {
       rate_limits: rateLimits
     }),
@@ -144,6 +157,7 @@ function StatusLineInner({
   const permissionMode = useAppState(s => s.toolPermissionContext.mode);
   const additionalWorkingDirectories = useAppState(s => s.toolPermissionContext.additionalWorkingDirectories);
   const statusLineText = useAppState(s => s.statusLineText);
+  const effortValue = useAppState(s => s.effortValue) as EffortValue | undefined;
   const setAppState = useSetAppState();
   const settings = useSettings();
   const {
@@ -165,6 +179,8 @@ function StatusLineInner({
   addedDirsRef.current = additionalWorkingDirectories;
   const mainLoopModelRef = useRef(mainLoopModel);
   mainLoopModelRef.current = mainLoopModel;
+  const effortValueRef = useRef(effortValue);
+  effortValueRef.current = effortValue;
 
   // Track previous state to detect changes and cache expensive calculations
   const previousStateRef = useRef<{
@@ -173,12 +189,14 @@ function StatusLineInner({
     permissionMode: PermissionMode;
     vimMode: VimMode | undefined;
     mainLoopModel: ModelName;
+    effortValue: EffortValue | undefined;
   }>({
     messageId: null,
     exceeds200kTokens: false,
     permissionMode,
     vimMode,
-    mainLoopModel
+    mainLoopModel,
+    effortValue
   });
 
   // Debounce timer ref
@@ -206,7 +224,7 @@ function StatusLineInner({
         previousStateRef.current.messageId = currentMessageId;
         previousStateRef.current.exceeds200kTokens = exceeds200kTokens;
       }
-      const statusInput = buildStatusLineCommandInput(permissionModeRef.current, exceeds200kTokens, settingsRef.current, msgs, Array.from(addedDirsRef.current.keys()), mainLoopModelRef.current, vimModeRef.current);
+      const statusInput = buildStatusLineCommandInput(permissionModeRef.current, exceeds200kTokens, settingsRef.current, msgs, Array.from(addedDirsRef.current.keys()), mainLoopModelRef.current, vimModeRef.current, effortValueRef.current);
       const text = await executeStatusLineCommand(statusInput, controller.signal, undefined, logResult);
       if (!controller.signal.aborted) {
         setAppState(prev => {
@@ -233,17 +251,18 @@ function StatusLineInner({
     }, 300, debounceTimerRef, doUpdate);
   }, [doUpdate]);
 
-  // Only trigger update when assistant message, permission mode, vim mode, or model actually changes
+  // Only trigger update when assistant message, permission mode, vim mode, model, or effort actually changes
   useEffect(() => {
-    if (lastAssistantMessageId !== previousStateRef.current.messageId || permissionMode !== previousStateRef.current.permissionMode || vimMode !== previousStateRef.current.vimMode || mainLoopModel !== previousStateRef.current.mainLoopModel) {
+    if (lastAssistantMessageId !== previousStateRef.current.messageId || permissionMode !== previousStateRef.current.permissionMode || vimMode !== previousStateRef.current.vimMode || mainLoopModel !== previousStateRef.current.mainLoopModel || effortValue !== previousStateRef.current.effortValue) {
       // Don't update messageId here — let doUpdate handle it so
       // exceeds200kTokens is recalculated with the latest messages
       previousStateRef.current.permissionMode = permissionMode;
       previousStateRef.current.vimMode = vimMode;
       previousStateRef.current.mainLoopModel = mainLoopModel;
+      previousStateRef.current.effortValue = effortValue;
       scheduleUpdate();
     }
-  }, [lastAssistantMessageId, permissionMode, vimMode, mainLoopModel, scheduleUpdate]);
+  }, [lastAssistantMessageId, permissionMode, vimMode, mainLoopModel, effortValue, scheduleUpdate]);
 
   // When the statusLine command changes (hot reload), log the next result
   const statusLineCommand = settings?.statusLine?.command;
