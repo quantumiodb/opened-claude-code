@@ -80,7 +80,7 @@ export function AttachmentMessage({
           return <Box key={idx} paddingLeft={2}>
                 <Text>{BLACK_CIRCLE} </Text>
                 <Text>Task assigned: </Text>
-                <Text bold>#{parsedMsg.taskId}</Text>
+                <Text bold>#{parsedMsg?.taskId}</Text>
                 <Text> - {parsedMsg.subject}</Text>
                 <Text dimColor> (from {parsedMsg.assignedBy || msg_0.from})</Text>
               </Box>;
@@ -437,7 +437,7 @@ function TeammateTaskStatus(t0) {
   const bg = useSelectedMessageBg();
   let t1;
   if ($[0] !== attachment.taskId) {
-    t1 = s => s.tasks[attachment.taskId];
+    t1 = s => s.tasks?.[attachment.taskId];
     $[0] = attachment.taskId;
     $[1] = t1;
   } else {

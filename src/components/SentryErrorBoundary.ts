@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 interface Props {
+  name?: string
   children: React.ReactNode
 }
 

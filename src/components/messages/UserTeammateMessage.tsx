@@ -128,7 +128,7 @@ export function UserTeammateMessage({
                 <Text color="success">✓</Text>
                 <Text>
                   {' '}
-                  Completed task #{taskCompleted.taskId}
+                  Completed task #{taskCompleted?.taskId}
                   {taskCompleted.taskSubject && <Text dimColor> ({taskCompleted.taskSubject})</Text>}
                 </Text>
               </MessageResponse>
