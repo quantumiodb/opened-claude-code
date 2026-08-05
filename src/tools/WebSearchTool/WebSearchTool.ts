@@ -12,6 +12,7 @@ import { lazySchema } from '../../utils/lazySchema.js'
 import { logError } from '../../utils/log.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { getMainLoopModel, getSmallFastModel } from '../../utils/model/model.js'
+import { getProxyFetchOptions } from '../../utils/proxy.js'
 import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
 import { getWebSearchPrompt, WEB_SEARCH_TOOL_NAME } from './prompt.js'
@@ -149,6 +150,138 @@ function makeOutputFromSearchResponse(
   }
 }
 
+/**
+ * DeepSeek's Anthropic-compatible /anthropic endpoint accepts the
+ * Anthropic-format web_search_20250305 tool, but the search is synthesized by
+ * the model itself — it returns no real SERP hits. For genuine server-side
+ * search we bypass the Anthropic-format nested call and hit DeepSeek's
+ * OpenAI-style Responses API (POST {base}/responses) with its built-in
+ * web_search_2025_08_26 tool, which only supports deepseek-v4-flash.
+ */
+const DEEPSEEK_WEB_SEARCH_MODEL = 'deepseek-v4-flash'
+
+function isDeepSeekProvider(): boolean {
+  const baseUrl = process.env.ANTHROPIC_BASE_URL
+  if (baseUrl) {
+    try {
+      if (new URL(baseUrl).hostname.includes('deepseek.com')) return true
+    } catch {
+      // ignore malformed URL
+    }
+  }
+  return getMainLoopModel().toLowerCase().startsWith('deepseek-')
+}
+
+function deriveDeepSeekResponsesBaseUrl(): string {
+  const baseUrl =
+    process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic'
+  return baseUrl
+    .replace(/\/anthropic\/?$/, '')
+    .replace(/\/v1\/?$/, '')
+    .replace(/\/+$/, '')
+}
+
+interface DeepSeekResponseOutputItem {
+  type?: string
+  content?: Array<{
+    type?: string
+    text?: string
+    annotations?: Array<{ type?: string; url?: string; title?: string }>
+  }>
+  annotations?: Array<{ type?: string; url?: string; title?: string }>
+  output?: Array<{ type?: string; url?: string; title?: string }>
+}
+
+function extractMarkdownLinks(text: string): SearchResult['content'] {
+  const hits: SearchResult['content'] = []
+  const re = /\[([^\]]+)\]\(((?:https?:\/\/)[^\s)]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    hits.push({ title: m[1].trim() || m[2], url: m[2] })
+  }
+  return hits
+}
+
+async function deepSeekWebSearch(
+  query: string,
+  signal: AbortSignal,
+): Promise<{ hits: SearchResult['content']; text: string }> {
+  const apiKey =
+    process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error(
+      'DeepSeek web search needs ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY',
+    )
+  }
+
+  const res = await fetch(`${deriveDeepSeekResponsesBaseUrl()}/responses`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: jsonStringify({
+      model: DEEPSEEK_WEB_SEARCH_MODEL,
+      input: `Perform a web search for the query: ${query}. Cite your sources as markdown links like [title](url).`,
+      tools: [{ type: 'web_search_2025_08_26' }],
+      tool_choice: { type: 'web_search' },
+    }),
+    signal,
+    ...getProxyFetchOptions({ forAnthropicAPI: false }),
+  })
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(
+      `DeepSeek Responses API error ${res.status}: ${detail.slice(0, 500)}`,
+    )
+  }
+
+  const data = (await res.json()) as { output?: DeepSeekResponseOutputItem[] }
+  const hits: SearchResult['content'] = []
+  const textParts: string[] = []
+
+  for (const item of data.output ?? []) {
+    if (item.type === 'message') {
+      for (const block of item.content ?? []) {
+        if (block.type === 'output_text' && block.text) {
+          textParts.push(block.text)
+        }
+        for (const ann of block.annotations ?? []) {
+          if (ann.type === 'url_citation' && ann.url) {
+            hits.push({ title: ann.title || ann.url, url: ann.url })
+          }
+        }
+      }
+      for (const ann of item.annotations ?? []) {
+        if (ann.type === 'url_citation' && ann.url) {
+          hits.push({ title: ann.title || ann.url, url: ann.url })
+        }
+      }
+    } else if (item.type === 'web_search_call') {
+      for (const r of item.output ?? []) {
+        if (r.type === 'web_search_result' && r.url) {
+          hits.push({ title: r.title || r.url, url: r.url })
+        }
+      }
+    }
+  }
+
+  const text = textParts.join('\n')
+
+  // DeepSeek returns links as markdown inside the message text (annotations are
+  // typically empty), so extract them to build the structured links list.
+  hits.push(...extractMarkdownLinks(text))
+
+  // Dedupe by URL, preserving order.
+  const seen = new Set<string>()
+  const unique = hits.filter(h =>
+    seen.has(h.url) ? false : (seen.add(h.url), true),
+  )
+
+  return { hits: unique, text }
+}
+
 export const WebSearchTool = buildTool({
   name: WEB_SEARCH_TOOL_NAME,
   searchHint: 'search the web for current information',
@@ -166,6 +299,12 @@ export const WebSearchTool = buildTool({
     return summary ? `Searching for ${summary}` : 'Searching the web'
   },
   isEnabled() {
+    // DeepSeek runs real server-side search through its Responses API (see
+    // call()), so enable it regardless of provider classification.
+    if (isDeepSeekProvider()) {
+      return true
+    }
+
     const provider = getAPIProvider()
     const model = getMainLoopModel()
 
@@ -254,6 +393,61 @@ export const WebSearchTool = buildTool({
   async call(input, context, _canUseTool, _parentMessage, onProgress) {
     const startTime = performance.now()
     const { query } = input
+
+    // DeepSeek: run genuine server-side search through its Responses API
+    // (web_search_2025_08_26) instead of the Anthropic-format nested tool call,
+    // which on DeepSeek's /anthropic endpoint only echoes model-emitted text.
+    if (isDeepSeekProvider()) {
+      try {
+        if (onProgress) {
+          onProgress({
+            toolUseID: 'deepseek-search-start',
+            data: { type: 'query_update', query },
+          })
+        }
+        const { hits, text } = await deepSeekWebSearch(
+          query,
+          context.abortController.signal,
+        )
+        const results: (SearchResult | string)[] = []
+        if (text.trim().length > 0) {
+          results.push(text.trim())
+        }
+        if (hits.length > 0) {
+          results.push({
+            tool_use_id: `deepseek-web-search-${Math.round(startTime)}`,
+            content: hits,
+          })
+        }
+        if (onProgress) {
+          onProgress({
+            toolUseID: 'deepseek-search-done',
+            data: {
+              type: 'search_results_received',
+              resultCount: hits.length,
+              query,
+            },
+          })
+        }
+        const durationSeconds = (performance.now() - startTime) / 1000
+        return { data: { query, results, durationSeconds } }
+      } catch (err) {
+        logError(err instanceof Error ? err : new Error(String(err)))
+        const durationSeconds = (performance.now() - startTime) / 1000
+        return {
+          data: {
+            query,
+            results: [
+              `DeepSeek web search failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            ],
+            durationSeconds,
+          },
+        }
+      }
+    }
+
     const userMessage = createUserMessage({
       content: 'Perform a web search for the query: ' + query,
     })
