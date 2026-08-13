@@ -5,7 +5,10 @@
  * For example, grep returns 1 when no matches are found, which is not an error condition.
  */
 
-import { splitCommand_DEPRECATED } from '../../utils/bash/commands.js'
+import {
+  splitCommand_DEPRECATED,
+  splitCommandWithOperators,
+} from '../../utils/bash/commands.js'
 
 export type CommandSemantic = (
   exitCode: number,
@@ -106,10 +109,55 @@ function extractBaseCommand(command: string): string {
 }
 
 /**
+ * Detect a top-level `&&` in the command.
+ *
+ * Why: `cmd1 && cmd2` only runs cmd2 if cmd1 succeeds. When cmd1 fails, the
+ * aggregate exit code is cmd1's, but cmd2 never runs. If we then apply cmd2's
+ * per-command semantic (e.g. rg's "exit 1 = no matches"), we misread cmd1's
+ * real failure as a benign "no matches" — masking build/test/lint failures
+ * from the model.
+ *
+ * `||`, `;`, and `|` don't have this problem: with `||` the short-circuited
+ * case exits 0 (benign either way), and `;`/`|` always run the last segment.
+ *
+ * Top-level means outside of `(...)`, `$(...)`, or quoted strings.
+ * `splitCommandWithOperators` keeps operators as separate tokens; quoted or
+ * embedded `&&` stays inside string tokens and won't match. Subshell/command-
+ * substitution `&&` is wrapped in `(` / `)` tokens, so we track paren depth
+ * to skip those. False positives just fall back to DEFAULT_SEMANTIC (safe).
+ */
+function hasTopLevelAndAnd(command: string): boolean {
+  let tokens: string[]
+  try {
+    tokens = splitCommandWithOperators(command)
+  } catch {
+    return false
+  }
+  let depth = 0
+  for (const token of tokens) {
+    if (token === '(') {
+      depth++
+    } else if (token === ')') {
+      if (depth > 0) depth--
+    } else if (token === '&&' && depth === 0) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * Extract the primary command from a complex command line;
  * May get it super wrong - don't depend on this for security
  */
 function heuristicallyExtractBaseCommand(command: string): string {
+  // For commands containing a top-level `&&`, the last segment may not have
+  // executed. Bail to DEFAULT_SEMANTIC so real failures aren't masked.
+  // See hasTopLevelAndAnd for the full rationale.
+  if (hasTopLevelAndAnd(command)) {
+    return ''
+  }
+
   const segments = splitCommand_DEPRECATED(command)
 
   // Take the last command as that's what determines the exit code
