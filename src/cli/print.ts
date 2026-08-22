@@ -483,6 +483,8 @@ export async function runHeadless(
     includePartialMessages: boolean | undefined
     forkSession: boolean | undefined
     rewindFiles: string | undefined
+    sessionImport: string | undefined
+    sessionImportOnly: boolean | undefined
     enableAuthStatus: boolean | undefined
     agent: string | undefined
     workload: string | undefined
@@ -582,6 +584,37 @@ export async function runHeadless(
     )
     gracefulShutdownSync(1)
     return
+  }
+
+  // --session-import: write the transcript out as a real session, then either
+  // print its id and stop, or point --resume at it for this run. Has to happen
+  // before loadInitialMessages so everything downstream just sees an ordinary
+  // session id — and before the "needs a prompt" check, since importing alone
+  // is a complete operation that never calls the model.
+  if (options.sessionImport) {
+    try {
+      const { importSessionWithTitle } = await import(
+        '../commands/session-import/sessionImport.js'
+      )
+      const { sessionId, serializedMessages, title } =
+        await importSessionWithTitle(options.sessionImport)
+      if (options.sessionImportOnly) {
+        // Bare id on stdout so scripts can pipe it straight into -r.
+        process.stdout.write(`${sessionId}\n`)
+        gracefulShutdownSync(0)
+        return
+      }
+      process.stderr.write(
+        `Imported ${serializedMessages.length} messages as "${title}" (${sessionId})\n`,
+      )
+      options.resume = sessionId
+    } catch (error) {
+      process.stderr.write(
+        `Error: Unable to import session: ${errorMessage(error)}\n`,
+      )
+      gracefulShutdownSync(1)
+      return
+    }
   }
 
   const structuredIO = getStructuredIO(inputPrompt, options)

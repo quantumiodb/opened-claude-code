@@ -433,9 +433,20 @@ export function isCustomTitleEnabled(): boolean {
 // string; homedir/env/regex are all session-invariant so the result is
 // stable for a given input. Worktree switches just change the key — no
 // cache clear needed.
-export const getProjectDir = memoize((projectDir: string): string => {
-  return join(getProjectsDir(), sanitizePath(projectDir))
-})
+//
+// Resolver keys off CLAUDE_CONFIG_DIR too: getProjectsDir() reads that env var
+// (via getClaudeConfigHomeDir), so a test — or a runtime config swap — that
+// changes it must invalidate the cache or callers silently read/write the
+// wrong project dir. NUL joins the two parts because it's the one byte that
+// can't appear in a path, so no (configDir, projectDir) pair can alias
+// another's key.
+export const getProjectDir = memoize(
+  (projectDir: string): string => {
+    return join(getProjectsDir(), sanitizePath(projectDir))
+  },
+  (projectDir: string) =>
+    `${process.env.CLAUDE_CONFIG_DIR ?? ''}\0${projectDir}`,
+)
 
 let project: Project | null = null
 let cleanupRegistered = false

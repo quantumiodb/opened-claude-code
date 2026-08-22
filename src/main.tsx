@@ -984,7 +984,7 @@ async function run(): Promise<CommanderCommand> {
       throw new Error('--task-budget must be a positive integer');
     }
     return tokens;
-  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).addOption(new Option('--deep-link-origin', 'Signal that this session was launched from a deep link').hideHelp()).addOption(new Option('--deep-link-repo <slug>', 'Repo slug the deep link ?repo= parameter resolved to the current cwd').hideHelp()).addOption(new Option('--deep-link-last-fetch <ms>', 'FETCH_HEAD mtime in epoch ms, precomputed by the deep link trampoline').argParser(v => {
+  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).option('--session-import <path>', 'Import a conversation transcript (.jsonl) as a new session in this directory and resume it').addOption(new Option('--session-import-only', 'With --session-import, print the new session ID and exit instead of resuming').default(false)).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).addOption(new Option('--deep-link-origin', 'Signal that this session was launched from a deep link').hideHelp()).addOption(new Option('--deep-link-repo <slug>', 'Repo slug the deep link ?repo= parameter resolved to the current cwd').hideHelp()).addOption(new Option('--deep-link-last-fetch <ms>', 'FETCH_HEAD mtime in epoch ms, precomputed by the deep link trampoline').argParser(v => {
     const n = Number(v);
     return Number.isFinite(n) ? n : undefined;
   }).hideHelp()).option('--from-pr [value]', 'Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term', value => value || true).option('--no-session-persistence', 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)').addOption(new Option('--resume-session-at <message id>', 'When resuming, only messages up to and including the assistant message with <message.id> (use with --resume in print mode)').argParser(String).hideHelp()).addOption(new Option('--rewind-files <user-message-id>', 'Restore files to state at the specified user message and exit (requires --resume)').hideHelp())
@@ -1271,6 +1271,17 @@ async function run(): Promise<CommanderCommand> {
     // trust is established and GrowthBook has auth headers.
     let remoteControl = false;
     const remoteControlName = typeof remoteControlOption === 'string' && remoteControlOption.length > 0 ? remoteControlOption : undefined;
+
+    // --session-import creates the session to resume, so pairing it with a
+    // flag that also picks one is ambiguous rather than additive.
+    if (options.sessionImport && (options.resume || options.continue || options.fromPr)) {
+      process.stderr.write(chalk.red('Error: --session-import cannot be combined with --resume, --continue, or --from-pr.\n'));
+      process.exit(1);
+    }
+    if (options.sessionImportOnly && !options.sessionImport) {
+      process.stderr.write(chalk.red('Error: --session-import-only requires --session-import <path>.\n'));
+      process.exit(1);
+    }
 
     // Validate session ID if provided
     if (sessionId) {
@@ -2850,6 +2861,8 @@ async function run(): Promise<CommanderCommand> {
         forkSession: options.forkSession || false,
         resumeSessionAt: options.resumeSessionAt || undefined,
         rewindFiles: options.rewindFiles,
+        sessionImport: options.sessionImport,
+        sessionImportOnly: options.sessionImportOnly,
         enableAuthStatus: options.enableAuthStatus,
         agent: agentCli,
         workload: options.workload,
@@ -3351,7 +3364,7 @@ async function run(): Promise<CommanderCommand> {
         thinkingConfig
       }, renderAndRun);
       return;
-    } else if (options.resume || options.fromPr || teleport || remote !== null) {
+    } else if (options.resume || options.fromPr || options.sessionImport || teleport || remote !== null) {
       // Handle resume flow - from file (ant-only), session ID, or interactive selector
 
       // Clear stale caches before resuming to ensure fresh file/skill discovery
@@ -3376,6 +3389,40 @@ async function run(): Promise<CommanderCommand> {
         } else if (typeof options.fromPr === 'string') {
           // Could be a PR number or URL
           filterByPr = options.fromPr;
+        }
+      }
+
+      // --session-import <path>: materialize the transcript as a real session
+      // file in this project dir, then let the resume-by-id path below pick it
+      // up. Nothing after this point is import-specific — by the time we hand
+      // off the id, the file on disk is an ordinary session.
+      if (options.sessionImport) {
+        try {
+          const importStart = performance.now();
+          const {
+            importSessionWithTitle
+          } = await import('./commands/session-import/sessionImport.js');
+          const {
+            sessionId: importedSessionId,
+            serializedMessages,
+            title
+          } = await importSessionWithTitle(options.sessionImport);
+          if (options.sessionImportOnly) {
+            // Bare id on stdout so scripts can pipe it straight into -r.
+            process.stdout.write(`${importedSessionId}\n`);
+            await gracefulShutdown(0);
+            process.exit(0);
+          }
+          process.stderr.write(chalk.dim(`Imported ${serializedMessages.length} messages as "${title}" (${importedSessionId})\n`));
+          maybeSessionId = importedSessionId;
+          logEvent('tengu_session_resumed', {
+            entrypoint: 'session_import' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            success: true,
+            resume_duration_ms: Math.round(performance.now() - importStart)
+          });
+        } catch (error) {
+          logError(error);
+          return await exitWithError(root, `Unable to import session: ${errorMessage(error)}`, () => gracefulShutdown(1));
         }
       }
 
