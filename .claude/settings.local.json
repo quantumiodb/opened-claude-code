@@ -35,7 +35,11 @@
       "Bash(./dist/claude:*)",
       "Bash(npm profile:*)",
       "Bash(npm publish:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(npm prefix:*)",
+      "Read(//home/administrator/workspace/opened-claude-code/$\\(npm prefix -g\\)/bin/**)",
+      "Read(//home/administrator/workspace/opened-claude-code/$\\(npm prefix -g\\)/lib/node_modules/opened-claude-code/**)",
+      "Bash(npm ls:*)"
     ]
   }
 }
