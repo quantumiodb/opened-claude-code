@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: '1.3.6'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # bun.lock is gitignored in this repo, so cache the global module cache
+      # keyed on package.json instead of a lockfile hash.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun run test
+
+  build:
+    name: Build bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify build output is unpatched
+        # scripts/build.ts temporarily rewrites feature() gates in src/ and
+        # restores them afterwards. A dirty tree means the restore failed.
+        run: git diff --exit-code -- src
+
+      - name: Smoke test CLI
+        run: |
+          bun dist/cli.js -v | tee /tmp/version.txt
+          grep -q 'Claude Code' /tmp/version.txt
+          bun dist/cli.js --help > /dev/null
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-bundle
+          path: |
+            dist/cli.js
+            dist/*.md
+          retention-days: 14
+          if-no-files-found: error
+
+  typecheck:
+    name: Typecheck (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The source snapshot has ~2500 residual errors from stub types, so this
+    # job reports without gating the workflow.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+  build-binary:
+    name: Build standalone binary
+    # Expensive (~124 MB executable) — only on manual dispatch.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binary
+        run: bun run build:binary
+
+      - name: Smoke test binary
+        run: ./dist/claude -v
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-linux-x64
+          path: dist/claude
+          retention-days: 14
+          if-no-files-found: error

@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "bun run tsc --noEmit",
+    "test": "vitest run",
     "build": "bun scripts/build.ts",
     "build:binary": "bun scripts/build.ts --binary",
+    "pack:npm": "bun scripts/pack-npm.ts",
     "start": "bun dist/cli.js",
     "dev": "bun run build && bun dist/cli.js"
   },
@@ -111,6 +113,7 @@
     "@types/cacache": "^17.0.2",
     "@types/plist": "^3.0.5",
     "@types/turndown": "^5.0.5",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.2"
   }
 }

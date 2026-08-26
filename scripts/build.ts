@@ -62,13 +62,22 @@ const isBinary = process.argv.includes('--binary')
 console.log(`Enabled features: ${ENABLED_FEATURES.join(', ')} (patched ${modified.length} files)`)
 console.log(`Build mode: ${isBinary ? 'binary (standalone executable)' : 'bundle (JS)'}`)
 
+// Repo homepage. Only used to build human-facing URLs (issue reporting).
+const REPO_URL = 'https://github.com/quantumiodb/opened-claude-code'
+
+// npm package identity. This is an npm *package specifier*, not a URL — the
+// auto-updater, `claude update` and `/doctor` interpolate it into
+// `npm view <spec>@<tag> version` and `npm i -g <spec>`. Putting a git/https
+// URL here breaks `npm view`. Keep it in sync with scripts/pack-npm.ts.
+const PACKAGE_URL = process.env.NPM_PACKAGE_NAME ?? 'opened-claude-code'
+
 const MACRO_DEFINES =
   `--define 'MACRO.VERSION="2.1.87"' ` +
   `--define 'MACRO.BUILD_TIME="2026-03-10"' ` +
-  `--define 'MACRO.PACKAGE_URL="@anthropic-ai/claude-code"' ` +
+  `--define 'MACRO.PACKAGE_URL="${PACKAGE_URL}"' ` +
   `--define 'MACRO.NATIVE_PACKAGE_URL=""' ` +
   `--define 'MACRO.FEEDBACK_CHANNEL=""' ` +
-  `--define 'MACRO.ISSUES_EXPLAINER=""' ` +
+  `--define 'MACRO.ISSUES_EXPLAINER="report the issue at ${REPO_URL}/issues"' ` +
   `--define 'MACRO.VERSION_CHANGELOG=""' ` +
   `--define 'process.env.USER_TYPE="external"' ` +
   `--define 'process.env.CCR_FORCE_BUNDLE="true"'`

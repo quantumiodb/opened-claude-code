@@ -27,7 +27,15 @@
       "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/tools/FileReadTool/imageProcessor.ts)",
       "Bash(head -10 grep -n \"napi\\\\|import\" /Users/jianghua/work/opened-claude-code/src/utils/deepLink/protocolHandler.ts)",
       "Bash(npm pack:*)",
-      "Bash(npm i:*)"
+      "Bash(npm i:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(sed -e 's/\\\\\\(_authToken=\\\\\\).*/\\\\1***REDACTED***/' ~/.npmrc)",
+      "Bash(npm config *)",
+      "Bash(npm whoami *)",
+      "Bash(./dist/claude:*)",
+      "Bash(npm profile:*)",
+      "Bash(npm publish:*)",
+      "Bash(npm view:*)"
     ]
   }
 }
