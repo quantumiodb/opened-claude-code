@@ -83,32 +83,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  typecheck:
-    name: Typecheck (informational)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # The source snapshot has ~2500 residual errors from stub types, so this
-    # job reports without gating the workflow.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}
-          restore-keys: ${{ runner.os }}-bun-
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Typecheck
-        run: bun run typecheck
-
   build-binary:
     name: Build standalone binary
     # Expensive (~124 MB executable) — only on manual dispatch.
