@@ -16,6 +16,7 @@ import { logForDebugging } from '../../utils/debug.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { escapeRegExp } from '../../utils/stringUtils.js'
 import { isToolSearchEnabledOptimistic } from '../../utils/toolSearch.js'
+import { isLocalToolSearchTransport } from '../../utils/toolSearchTransport.js'
 import { getPrompt, isDeferredTool, TOOL_SEARCH_TOOL_NAME } from './prompt.js'
 
 export const inputSchema = lazySchema(() =>
@@ -440,6 +441,14 @@ export const ToolSearchTool = buildTool({
    * Returns a tool_result with tool_reference blocks.
    * This format works on 1P/Foundry. Bedrock/Vertex may not support
    * client-side tool_reference expansion yet.
+   *
+   * Under the local transport the tool_reference blocks are still emitted —
+   * extractDiscoveredToolNames reads them out of the local transcript to decide
+   * which tools to include in the next request — but claude.ts strips them
+   * before the request goes out, since no beta was negotiated. A leading text
+   * block is added so that what survives the strip still tells the model what
+   * happened; without it the strip would leave only a "[Tool references
+   * removed]" placeholder.
    */
   mapToolResultToToolResultBlockParam(
     content: Output,
@@ -459,13 +468,22 @@ export const ToolSearchTool = buildTool({
         content: text,
       }
     }
+    const references = content.matches.map(name => ({
+      type: 'tool_reference' as const,
+      tool_name: name,
+    }))
     return {
       type: 'tool_result',
       tool_use_id: toolUseID,
-      content: content.matches.map(name => ({
-        type: 'tool_reference' as const,
-        tool_name: name,
-      })),
+      content: isLocalToolSearchTransport()
+        ? [
+            {
+              type: 'text' as const,
+              text: `Loaded ${content.matches.length} tool${content.matches.length === 1 ? '' : 's'}: ${content.matches.join(', ')}. Their full definitions are in your tool list from your next message onward — call them directly, and do not search for these names again.`,
+            },
+            ...references,
+          ]
+        : references,
     } as unknown as ToolResultBlockParam
   },
 } satisfies ToolDef<InputSchema, Output>)

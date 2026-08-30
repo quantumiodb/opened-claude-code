@@ -185,6 +185,7 @@ import {
 import {
   extractDiscoveredToolNames,
   isDeferredToolsDeltaEnabled,
+  isLocalToolSearchTransport,
   isToolSearchEnabled,
 } from 'src/utils/toolSearch.js'
 import { API_MAX_MEDIA_PER_REQUEST } from '../../constants/apiLimits.js'
@@ -1156,10 +1157,17 @@ async function* queryModel(
     )
   }
 
+  // Local transport does the deferral client-side (undiscovered tools are just
+  // absent from filteredTools above), so nothing beta-shaped goes on the wire:
+  // no defer_loading, no beta header, and the tool_reference blocks that track
+  // discovery get stripped below.
+  const localToolSearch = useToolSearch && isLocalToolSearchTransport()
+
   // Add tool search beta header if enabled - required for defer_loading to be accepted
   // Header differs by provider: 1P/Foundry use advanced-tool-use, Vertex/Bedrock use tool-search-tool
   // For Bedrock, this header must go in extraBodyParams, not the betas array
-  const toolSearchHeader = useToolSearch ? getToolSearchBetaHeader() : null
+  const toolSearchHeader =
+    useToolSearch && !localToolSearch ? getToolSearchBetaHeader() : null
   if (toolSearchHeader && getAPIProvider() !== 'bedrock') {
     if (!betas.includes(toolSearchHeader)) {
       betas.push(toolSearchHeader)
@@ -1191,7 +1199,9 @@ async function* queryModel(
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
   const willDefer = (t: Tool) =>
-    useToolSearch && (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
+    useToolSearch &&
+    !localToolSearch &&
+    (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
   // MCP tools are per-user → dynamic tool section → can't globally cache.
   // Only gate when an MCP tool will actually render (not defer_loading).
   const needsToolBasedCacheMarker =
@@ -1265,7 +1275,12 @@ async function* queryModel(
   // Note: For assistant messages, normalizeMessagesForAPI already normalized the
   // tool inputs, so stripCallerFieldFromAssistantMessage only needs to remove the
   // 'caller' field (not re-normalize inputs).
-  if (!useToolSearch) {
+  //
+  // The local transport runs this too: its tool_reference blocks exist only to
+  // track discovery in the local transcript (extractDiscoveredToolNames reads
+  // `messages`, above, not `messagesForAPI`) and must not reach an endpoint
+  // that never agreed to the beta.
+  if (!useToolSearch || localToolSearch) {
     messagesForAPI = messagesForAPI.map(msg => {
       switch (msg.type) {
         case 'user':

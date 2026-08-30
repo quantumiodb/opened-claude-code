@@ -34,11 +34,11 @@ import { getMergedBetas } from './betas.js'
 import { getContextWindowForModel } from './context.js'
 import { logForDebugging } from './debug.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
-import {
-  getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
-} from './model/providers.js'
 import { jsonStringify } from './slowOperations.js'
+import {
+  getToolSearchTransport,
+  isLocalToolSearchTransport,
+} from './toolSearchTransport.js'
 import { zodToJsonSchema } from './zodToJsonSchema.js'
 
 /**
@@ -160,29 +160,29 @@ const getDeferredToolTokenCount = memoize(
  */
 export type ToolSearchMode = 'tst' | 'tst-auto' | 'standard'
 
+export {
+  getToolSearchTransport,
+  isLocalToolSearchTransport,
+  type ToolSearchTransport,
+} from './toolSearchTransport.js'
+
 /**
  * Determines the tool search mode from ENABLE_TOOL_SEARCH.
  *
  *   ENABLE_TOOL_SEARCH    Mode
  *   auto / auto:1-99      tst-auto
- *   true / auto:0         tst
+ *   true / auto:0 / local tst
  *   false / auto:100      standard
  *   (unset)               tst (default: always defer MCP and shouldDefer tools)
+ *
+ * This is orthogonal to getToolSearchTransport(): the mode decides *whether* to
+ * defer, the transport decides *how*.
  */
 export function getToolSearchMode(): ToolSearchMode {
-  // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is a kill switch for beta API
-  // features. Tool search emits defer_loading on tool definitions and
-  // tool_reference content blocks — both require the API to accept a beta
-  // header. When the kill switch is set, force 'standard' so no beta shapes
-  // reach the wire, even if ENABLE_TOOL_SEARCH is also set. This is the
-  // explicit escape hatch for proxy gateways that the heuristic in
-  // isToolSearchEnabledOptimistic doesn't cover.
-  // github.com/anthropics/claude-code/issues/20031
-  if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS)) {
-    return 'standard'
-  }
-
   const value = process.env.ENABLE_TOOL_SEARCH
+
+  // Explicit transport selection; deferral itself stays on.
+  if (value === 'local') return 'tst'
 
   // Handle auto:N syntax - check edge cases first
   const autoPercent = value ? parseAutoPercentage(value) : null
@@ -279,41 +279,21 @@ export function isToolSearchEnabledOptimistic(): boolean {
     return false
   }
 
-  // tool_reference is a beta content type that third-party API gateways
-  // (ANTHROPIC_BASE_URL proxies) typically don't support. When the provider
-  // is 'firstParty' but the base URL points elsewhere, the proxy will reject
-  // tool_reference blocks with a 400. Vertex/Bedrock/Foundry are unaffected —
-  // they have their own endpoints and beta headers.
-  // https://github.com/anthropics/claude-code/issues/30912
-  //
-  // HOWEVER: some proxies DO support tool_reference (LiteLLM passthrough,
-  // Cloudflare AI Gateway, corp gateways that forward beta headers). The
-  // blanket disable breaks defer_loading for those users — all MCP tools
-  // loaded into main context instead of on-demand (gh-31936 / CC-457,
+  // A non-first-party base URL used to disable tool search outright, on the
+  // theory that an ANTHROPIC_BASE_URL proxy would reject tool_reference with a
+  // 400 (gh-30912). That threw away the context savings along with the beta
+  // shapes — every deferred tool got loaded upfront instead (gh-31936 / CC-457,
   // likely the real cause of CC-330 "v2.1.70 defer_loading regression").
-  // This gate only applies when ENABLE_TOOL_SEARCH is unset/empty (default
-  // behavior). Setting any non-empty value — 'true', 'auto', 'auto:N' —
-  // means the user is explicitly configuring tool search and asserts their
-  // setup supports it. The falsy check (rather than === undefined) aligns
-  // with getToolSearchMode(), which also treats "" as unset.
-  if (
-    !process.env.ENABLE_TOOL_SEARCH &&
-    getAPIProvider() === 'firstParty' &&
-    !isFirstPartyAnthropicBaseUrl()
-  ) {
-    if (!loggedOptimistic) {
-      loggedOptimistic = true
-      logForDebugging(
-        `[ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=${process.env.ANTHROPIC_BASE_URL} is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.`,
-      )
-    }
-    return false
-  }
-
+  // Deferral now stays on and getToolSearchTransport() drops to 'local' for
+  // those endpoints, which saves the same context without emitting any beta
+  // field. Proxies that do forward tool_reference (LiteLLM passthrough,
+  // Cloudflare AI Gateway, corp gateways) can opt back into the API transport
+  // by pointing ANTHROPIC_BASE_URL at a first-party host or accepting 'local',
+  // which costs them nothing.
   if (!loggedOptimistic) {
     loggedOptimistic = true
     logForDebugging(
-      `[ToolSearch:optimistic] mode=${mode}, ENABLE_TOOL_SEARCH=${process.env.ENABLE_TOOL_SEARCH}, result=true`,
+      `[ToolSearch:optimistic] mode=${mode}, transport=${getToolSearchTransport()}, ENABLE_TOOL_SEARCH=${process.env.ENABLE_TOOL_SEARCH}, result=true`,
     )
   }
   return true
@@ -415,8 +395,10 @@ export async function isToolSearchEnabled(
     })
   }
 
-  // Check if model supports tool_reference
-  if (!modelSupportsToolReference(model)) {
+  // Check if model supports tool_reference. Only the 'api' transport puts
+  // tool_reference on the wire; under 'local' the model never sees one, so
+  // models like Haiku can still get the deferral savings.
+  if (!isLocalToolSearchTransport() && !modelSupportsToolReference(model)) {
     logForDebugging(
       `Tool search disabled for model '${model}': model does not support tool_reference blocks. ` +
         `This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.`,

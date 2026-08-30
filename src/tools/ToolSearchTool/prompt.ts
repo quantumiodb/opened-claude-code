@@ -2,6 +2,7 @@ import { feature } from 'bun:bundle'
 import { isReplBridgeActive } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { Tool } from '../../Tool.js'
+import { isLocalToolSearchTransport } from '../../utils/toolSearchTransport.js'
 import { AGENT_TOOL_NAME } from '../AgentTool/constants.js'
 
 // Dead code elimination: Brief tool name only needed when KAIROS or KAIROS_BRIEF is on
@@ -41,9 +42,18 @@ function getToolLocationHint(): string {
     : 'Deferred tools appear by name in <available-deferred-tools> messages.'
 }
 
-const PROMPT_TAIL = ` Until fetched, only the name is known — there is no parameter schema, so the tool cannot be invoked. This tool takes a query, matches it against the deferred tool list, and returns the matched tools' complete JSONSchema definitions inside a <functions> block. Once a tool's schema appears in that result, it is callable exactly like any tool defined at the top of the prompt.
+const PROMPT_TAIL_COMMON = ` Until fetched, only the name is known — there is no parameter schema, so the tool cannot be invoked. This tool takes a query and matches it against the deferred tool list.`
 
-Result format: each matched tool appears as one <function>{"description": "...", "name": "...", "parameters": {...}}</function> line inside the <functions> block — the same encoding as the tool list at the top of this prompt.
+const PROMPT_TAIL_API = ` It returns the matched tools' complete JSONSchema definitions inside a <functions> block. Once a tool's schema appears in that result, it is callable exactly like any tool defined at the top of the prompt.
+
+Result format: each matched tool appears as one <function>{"description": "...", "name": "...", "parameters": {...}}</function> line inside the <functions> block — the same encoding as the tool list at the top of this prompt.`
+
+// Local transport: the matched tools are added to the tool list of the *next*
+// request rather than inlined into this result, so the model is told to expect
+// a confirmation line instead of a <functions> block it would otherwise wait for.
+const PROMPT_TAIL_LOCAL = ` It returns the names it loaded; their full definitions are added to your tool list and are callable from your next message onward, exactly like any tool defined at the top of the prompt. You do not need to call this tool again for a name it already confirmed.`
+
+const PROMPT_TAIL_QUERIES = `
 
 Query forms:
 - "select:Read,Edit,Grep" — fetch these exact tools by name
@@ -117,5 +127,11 @@ export function formatDeferredToolLine(tool: Tool): string {
 }
 
 export function getPrompt(): string {
-  return PROMPT_HEAD + getToolLocationHint() + PROMPT_TAIL
+  return (
+    PROMPT_HEAD +
+    getToolLocationHint() +
+    PROMPT_TAIL_COMMON +
+    (isLocalToolSearchTransport() ? PROMPT_TAIL_LOCAL : PROMPT_TAIL_API) +
+    PROMPT_TAIL_QUERIES
+  )
 }
