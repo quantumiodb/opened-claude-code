@@ -9,6 +9,7 @@ import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from '../tools/FileReadTool/prompt.js'
+import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
 import { SEND_MESSAGE_TOOL_NAME } from '../tools/SendMessageTool/constants.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import { TASK_STOP_TOOL_NAME } from '../tools/TaskStopTool/prompt.js'
@@ -86,7 +87,12 @@ export function getCoordinatorUserContext(
   }
 
   const workerTools = isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
-    ? [BASH_TOOL_NAME, FILE_READ_TOOL_NAME, FILE_EDIT_TOOL_NAME]
+    ? [
+        BASH_TOOL_NAME,
+        FILE_READ_TOOL_NAME,
+        FILE_EDIT_TOOL_NAME,
+        FILE_WRITE_TOOL_NAME,
+      ]
         .sort()
         .join(', ')
     : Array.from(ASYNC_AGENT_ALLOWED_TOOLS)
@@ -110,7 +116,7 @@ export function getCoordinatorUserContext(
 
 export function getCoordinatorSystemPrompt(): string {
   const workerCapabilities = isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
-    ? 'Workers have access to Bash, Read, and Edit tools, plus MCP tools from configured MCP servers.'
+    ? 'Workers have access to Bash, Read, Edit, and Write tools, plus MCP tools from configured MCP servers.'
     : 'Workers have access to standard tools, MCP tools from configured MCP servers, and project skills via the Skill tool. Delegate skill invocations (e.g. /commit, /verify) to workers.'
 
   return `You are Claude Code, an AI assistant that orchestrates software engineering tasks across multiple workers.

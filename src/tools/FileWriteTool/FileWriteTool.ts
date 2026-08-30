@@ -230,19 +230,22 @@ export const FileWriteTool = buildTool({
     const dir = dirname(fullFilePath)
 
     // Discover skills from this file's path (fire-and-forget, non-blocking)
+    // Skip in simple mode - no skills available
     const cwd = getCwd()
-    const newSkillDirs = await discoverSkillDirsForPaths([fullFilePath], cwd)
-    if (newSkillDirs.length > 0) {
-      // Store discovered dirs for attachment display
-      for (const dir of newSkillDirs) {
-        dynamicSkillDirTriggers?.add(dir)
+    if (!isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+      const newSkillDirs = await discoverSkillDirsForPaths([fullFilePath], cwd)
+      if (newSkillDirs.length > 0) {
+        // Store discovered dirs for attachment display
+        for (const dir of newSkillDirs) {
+          dynamicSkillDirTriggers?.add(dir)
+        }
+        // Don't await - let skill loading happen in the background
+        addSkillDirectories(newSkillDirs).catch(() => {})
       }
-      // Don't await - let skill loading happen in the background
-      addSkillDirectories(newSkillDirs).catch(() => {})
-    }
 
-    // Activate conditional skills whose path patterns match this file
-    activateConditionalSkillsForPaths([fullFilePath], cwd)
+      // Activate conditional skills whose path patterns match this file
+      activateConditionalSkillsForPaths([fullFilePath], cwd)
+    }
 
     await diagnosticTracker.beforeFileEdited(fullFilePath)
 
